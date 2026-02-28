@@ -1,0 +1,27 @@
+#define HAVE_LIBUTIL 1
+#define HAVE_PTY_H 1
+
+#define HAVE_SYS_IOCTL_H 1
+#define HAVE_SYS_RESOURCE_H 1
+#define HAVE_SYS_TIME_H 1
+#define HAVE_UNISTD_H 1
+
+#define PACKAGE_NAME "atch"
+#define PACKAGE_NAME_UPPER "ATCH"
+#ifndef PACKAGE_VERSION
+#define PACKAGE_VERSION "dev"
+#endif
+#define PACKAGE_URL "https://github.com/mobydeck/atch"
+#define RETSIGTYPE void
+
+#define REDRAW_DEFAULT REDRAW_WINCH
+
+/* In-memory scrollback ring buffer size — must be a power of two */
+#ifndef SCROLLBACK_SIZE
+#define SCROLLBACK_SIZE (128 * 1024)
+#endif
+
+/* Maximum size of the on-disk session log; older bytes are trimmed on open */
+#ifndef LOG_MAX_SIZE
+#define LOG_MAX_SIZE (1024 * 1024)
+#endif

@@ -1,0 +1,9 @@
+/.*
+!.gitignore
+*.o
+*~
+*.1
+*.1.md
+/atch
+build/
+release/

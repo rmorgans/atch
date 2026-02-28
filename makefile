@@ -1,0 +1,58 @@
+VERSION ?= dev
+CC = gcc
+CFLAGS = -g -O2 -W -Wall -I. -DPACKAGE_VERSION=\"$(VERSION)\"
+LDFLAGS =
+LIBS = -lutil
+
+OBJ = attach.o master.o atch.o
+SRC = attach.c master.c atch.c
+
+IMAGE = atch-builder
+BUILDDIR ?= .
+
+archs = amd64 arm64
+arch ?= $(shell arch)
+
+atch: $(OBJ)
+	$(CC) -o $(BUILDDIR)/$@ -static $(LDFLAGS) $(OBJ) $(LIBS)
+
+atch.1.md: README.md scripts/readme2man.sh
+	bash scripts/readme2man.sh $< > $@
+
+atch.1: atch.1.md
+	pandoc --standalone -t man $< -o $@
+
+clean:
+	rm -f atch $(OBJ) *.1{,.md} *.c~
+
+.PHONY: fmt
+fmt:
+	docker run --rm -v "$$PWD":/src -w /src alpine:latest sh -c "apk add --no-cache indent && indent -linux $(SRCS) && indent -linux $(SRCS)"
+
+.PHONY: fmt-all
+fmt-all:
+	$(MAKE) fmt SRCS="*.c"
+
+
+attach.o: ./attach.c ./atch.h config.h
+master.o: ./master.c ./atch.h config.h
+atch.o: ./atch.c ./atch.h config.h
+
+.PHONY: build-image
+build-image:
+	docker build -t $(IMAGE):$(arch) --platform linux/$(arch) -f build.dockerfile .
+
+alpine-build-docker: build-image
+	$(MAKE) clean
+	docker run --rm -v "$$PWD":/src -e VERSION=$(VERSION) -w /src \
+		--platform linux/$(arch) $(IMAGE):$(arch) ./build.sh
+
+.PHONY: release
+release: atch.1 $(archs)
+	$(MAKE) clean
+
+$(archs):
+	mkdir -p release
+	$(MAKE) alpine-build-docker arch=$@ VERSION=$(VERSION)
+	export COPYFILE_DISABLE=true; \
+	tar -czf ./release/atch-linux-$@.tgz README.md atch.1 -C ./build atch; \
