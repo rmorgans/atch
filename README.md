@@ -38,8 +38,8 @@ undisturbed.
 - **No terminal emulation** — raw output stream is passed through unchanged
 - Sessions persist across disconnects
 - Scrollback replay on re-attach — see prior output when you reconnect
-- Push stdin directly to a running session (`-p`)
-- List all sessions with liveness status (`-l`)
+- Push stdin directly to a running session
+- List all sessions with liveness status
 - Prevents accidental recursive self-attach
 - Tiny and auditable
 
@@ -52,14 +52,8 @@ make
 ## Usage
 
 ```
-atch -a <session> <options>
-atch -A <session> <options> [command...]
-atch -c <session> <options> [command...]
-atch -n <session> <options> [command...]
-atch -N <session> <options> [command...]
-atch -p <session>
-atch -l
-atch -i
+atch [<session> [command...]]   Attach to session or create it (default)
+atch <command> [options] ...
 ```
 
 Sessions are identified by name. A bare name (no `/`) is stored as a socket
@@ -67,21 +61,26 @@ under `~/.cache/atch/`. A name containing `/` is used as-is as a filesystem path
 
 If no command is given, `$SHELL` is used.
 
-## Modes
+## Commands
 
-| Flag | Description |
-|------|-------------|
-| `-a` | Attach to an existing session. |
-| `-A` | Attach to a session, or create it (running the command) if it doesn't exist. |
-| `-c` | Create a new session and attach to it. |
-| `-n` | Create a new session and run the command detached (atch exits immediately). |
-| `-N` | Like `-n`, but atch stays in the foreground instead of daemonizing. |
-| `-p` | Copy stdin verbatim to the session (no detach-character scanning). |
-| `-k` | Gracefully stop a session (SIGTERM, then SIGKILL after 5 s if needed). |
-| `-l` | List all sessions in the session directory, with liveness status. |
-| `-i` | Print the current session name and exit 0 if inside a session; exit 1 silently if not. |
+| Command | Description |
+|---------|-------------|
+| `atch [<session> [cmd...]]` | Attach to a session, or create it if it doesn't exist (default behavior). |
+| `attach <session>` | Strict attach — fail if the session does not exist. |
+| `new <session> [cmd...]` | Create a new session and attach to it. |
+| `start <session> [cmd...]` | Create a new session, detached (atch exits immediately). |
+| `run <session> [cmd...]` | Like `start`, but atch stays in the foreground instead of daemonizing. |
+| `push <session>` | Copy stdin verbatim to the session. |
+| `kill <session>` | Gracefully stop a session (SIGTERM, then SIGKILL after 5 s if needed). |
+| `list` | List all sessions in the session directory, with liveness status. |
+| `current` | Print the current session name and exit 0 if inside a session; exit 1 silently if not. |
+
+Short aliases: `a` → `attach`, `n` → `new`, `s` → `start`, `p` → `push`,
+`k` → `kill`, `l` / `ls` → `list`.
 
 ## Options
+
+Options can appear before or after the session name.
 
 | Flag | Description |
 |------|-------------|
@@ -96,24 +95,29 @@ If no command is given, `$SHELL` is used.
 Use `--` to separate atch options from command arguments that start with `-`:
 
 ```sh
-atch -c mysession -- grep -r foo /var/log
+atch new mysession -- grep -r foo /var/log
 ```
 
 ## Examples
 
 **Start a shell session named `work` and attach to it:**
 ```sh
-atch -c work
+atch work
 ```
 
 **Start a specific command in a named session:**
 ```sh
-atch -c build -- make -j4
+atch new build -- make -j4
 ```
 
 **Attach to an existing session, creating it if needed:**
 ```sh
-atch -A work
+atch work
+```
+
+**Strict attach — fail if the session is not running:**
+```sh
+atch attach work
 ```
 
 **Detach** from a running session: press `^\` (Ctrl-\\). The session and its
@@ -121,27 +125,32 @@ program keep running.
 
 **Re-attach** later:
 ```sh
-atch -a work
+atch work
 ```
 
 **Run a command fully detached (no terminal needed):**
 ```sh
-atch -n daemon myserver
+atch start daemon myserver
 ```
 
 **Send keystrokes to a running session:**
 ```sh
-printf 'ls -la\n' | atch -p work
+printf 'ls -la\n' | atch push work
 ```
 
 **Use a custom detach character:**
 ```sh
-atch -a work -e '^A'
+atch attach work -e '^A'
 ```
 
 **List all sessions:**
 ```sh
-atch -l
+atch list
+```
+
+**Kill a session:**
+```sh
+atch kill work
 ```
 
 ## Session storage
@@ -153,24 +162,24 @@ created automatically, including `~/.cache` if it does not yet exist. If
 To use a custom path, include a `/` in the session name:
 
 ```sh
-atch -c /tmp/mysession
+atch new /tmp/mysession
 ```
 
 `atch` sets the `ATCH_SESSION` environment variable inside each session to the
 socket path. This prevents recursive self-attach and can be used by shell
 prompts or scripts to detect whether they are running inside an `atch` session.
 
-Use `atch -i` to check from a script or prompt:
+Use `atch current` to check from a script or prompt:
 
 ```sh
 # exit code: 0 inside a session, 1 outside
-atch -i && echo "inside session: $(atch -i)"
+atch current && echo "inside session: $(atch current)"
 
 # shell prompt example (bash/zsh PS1)
-PS1='$(atch -i 2>/dev/null && echo "[$(atch -i)] ")$ '
+PS1='$(atch current 2>/dev/null && echo "[$(atch current)] ")$ '
 ```
 
-Sessions can be nested: running `atch -c inner` from within a session is
+Sessions can be nested: running `atch new inner` from within a session is
 allowed. `ATCH_SESSION` is set only in the child process of each master, so
 the outer session's shell always retains its own value — the self-attach
 protection works correctly at all nesting levels.
@@ -190,6 +199,24 @@ make CFLAGS="-DSCROLLBACK_SIZE=$((256*1024))"
 ```
 
 The value must be a power of two.
+
+## Backward compatibility
+
+The original flag-based syntax is still supported:
+
+```
+atch -a <session>              # same as: atch attach <session>
+atch -A <session> [cmd...]     # same as: atch [<session> [cmd...]]
+atch -c <session> [cmd...]     # same as: atch new <session> [cmd...]
+atch -n <session> [cmd...]     # same as: atch start <session> [cmd...]
+atch -N <session> [cmd...]     # same as: atch run <session> [cmd...]
+atch -p <session>              # same as: atch push <session>
+atch -k <session>              # same as: atch kill <session>
+atch -l                        # same as: atch list
+atch -i                        # same as: atch current
+```
+
+Existing scripts do not need to be updated.
 
 ## License
 
