@@ -44,13 +44,13 @@ atch.o: ./atch.c ./atch.h config.h
 build-image:
 	docker build -t $(IMAGE):$(arch) --platform linux/$(arch) -f build.dockerfile .
 
-alpine-build-docker: build-image
+build-docker: build-image
 	$(MAKE) clean
 	docker run --rm -v "$$PWD":/src -e VERSION=$(VERSION) -w /src \
 		--platform linux/$(arch) $(IMAGE):$(arch) ./build.sh
 
 .PHONY: test
-test: alpine-build-docker
+test: build-docker
 	docker run --rm -v "$$PWD":/src \
 		--platform linux/$(arch) $(IMAGE):$(arch) \
 		sh /src/tests/test.sh /src/build/atch
@@ -60,6 +60,6 @@ release: man $(archs)
 
 $(archs):
 	mkdir -p release
-	$(MAKE) alpine-build-docker arch=$@ VERSION=$(VERSION)
+	$(MAKE) build-docker arch=$@ VERSION=$(VERSION)
 	export COPYFILE_DISABLE=true; \
 	tar -czf ./release/atch-linux-$@.tgz README.md atch.1 -C ./build atch; \

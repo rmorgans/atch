@@ -120,8 +120,11 @@ struct packet
 */
 #define BUFSIZE 4096
 
-#define SESSION_ENVVAR       PACKAGE_NAME_UPPER "_SESSION"
-#define SESSION_CHAIN_ENVVAR PACKAGE_NAME_UPPER "_SESSIONS"
+/* Computed at startup from progname so the binary can be renamed freely. */
+extern const char *session_envvar;
+extern const char *session_chain_envvar;
+#define SESSION_ENVVAR       session_envvar
+#define SESSION_CHAIN_ENVVAR session_chain_envvar
 
 void write_buf_or_fail(int fd, const void *buf, size_t count);
 void write_packet_or_fail(int fd, const struct packet *pkt);

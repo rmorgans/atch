@@ -508,8 +508,7 @@ static void client_activity(struct client *p)
 			p->attached = 1;	/* client loaded log; skip ring */
 		else
 			replay_start(p);
-	}
-	else if (pkt.type == MSG_DETACH)
+	} else if (pkt.type == MSG_DETACH)
 		p->attached = 0;
 
 	/* Window size change request, without a forced redraw. */

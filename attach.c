@@ -18,6 +18,70 @@ static int win_changed;
 /* Socket creation time, used to compute session age in messages. */
 time_t session_start;
 
+char const *clear_csi_data(void)
+{
+	if (no_ansiterm || clear_method == CLEAR_NONE ||
+	    (clear_method == CLEAR_UNSPEC && dont_have_tty))
+		return "\r\n";
+	/* CLEAR_MOVE, or CLEAR_UNSPEC with a real tty: move to bottom */
+	return "\033[999H\r\n";
+}
+
+/* Write buf to fd handling partial writes. Exit on failure. */
+void write_buf_or_fail(int fd, const void *buf, size_t count)
+{
+	while (count != 0) {
+		ssize_t ret = write(fd, buf, count);
+
+		if (ret >= 0) {
+			buf = (const char *)buf + ret;
+			count -= ret;
+		} else if (ret < 0 && errno == EINTR)
+			continue;
+		else {
+			if (session_start) {
+				char age[32];
+				session_age(age, sizeof(age));
+				printf
+				    ("%s[%s: session '%s' write failed after %s]\r\n",
+				     clear_csi_data(), progname,
+				     session_shortname(), age);
+			} else {
+				printf("%s[%s: write failed]\r\n",
+				       clear_csi_data(), progname);
+			}
+			exit(1);
+		}
+	}
+}
+
+/* Write pkt to fd. Exit on failure. */
+void write_packet_or_fail(int fd, const struct packet *pkt)
+{
+	while (1) {
+		ssize_t ret = write(fd, pkt, sizeof(struct packet));
+
+		if (ret == sizeof(struct packet))
+			return;
+		else if (ret < 0 && errno == EINTR)
+			continue;
+		else {
+			if (session_start) {
+				char age[32];
+				session_age(age, sizeof(age));
+				printf
+				    ("%s[%s: session '%s' write failed after %s]\r\n",
+				     clear_csi_data(), progname,
+				     session_shortname(), age);
+			} else {
+				printf("%s[%s: write failed]\r\n",
+				       clear_csi_data(), progname);
+			}
+			exit(1);
+		}
+	}
+}
+
 /* Restores the original terminal settings. */
 static void restore_term(void)
 {
@@ -260,7 +324,7 @@ int attach_main(int noerror)
 	}
 
 	/* Replay the on-disk log so the user sees full session history.
-	** Skip if already replayed by the error path (exited-session case). */
+	 ** Skip if already replayed by the error path (exited-session case). */
 	int skip_ring = 0;
 	if (!log_already_replayed && replay_session_log(0))
 		skip_ring = 1;
@@ -302,11 +366,11 @@ int attach_main(int noerror)
 	tcsetattr(0, TCSADRAIN, &cur_term);
 
 	/* Clear the screen on attach. Only do a full reset when explicitly
-	** requested (CLEAR_MOVE); default/unspec just emits a blank line so
-	** any preceding log replay remains visible.
-	** When log replay was done for a running session (skip_ring=1), skip
-	** the separator: the log ends at the exact pty cursor position, so
-	** the prompt is already visible and correctly placed. */
+	 ** requested (CLEAR_MOVE); default/unspec just emits a blank line so
+	 ** any preceding log replay remains visible.
+	 ** When log replay was done for a running session (skip_ring=1), skip
+	 ** the separator: the log ends at the exact pty cursor position, so
+	 ** the prompt is already visible and correctly placed. */
 	if (clear_method == CLEAR_MOVE && !no_ansiterm) {
 		write_buf_or_fail(1, "\033c", 2);
 	} else if (!quiet && !skip_ring) {
@@ -314,8 +378,8 @@ int attach_main(int noerror)
 	}
 
 	/* Tell the master that we want to attach.
-	** pkt.len=1 means the client already loaded the log; master skips
-	** the in-memory ring replay to avoid showing history twice. */
+	 ** pkt.len=1 means the client already loaded the log; master skips
+	 ** the in-memory ring replay to avoid showing history twice. */
 	memset(&pkt, 0, sizeof(struct packet));
 	pkt.type = MSG_ATTACH;
 	pkt.len = skip_ring;
@@ -564,7 +628,7 @@ int list_main(void)
 
 	closedir(d);
 
-empty:
+ empty:
 	if (count == 0 && !quiet)
 		printf("(no sessions)\n");
 	return 0;

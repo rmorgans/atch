@@ -173,8 +173,11 @@ atch kill work
 ## Session storage
 
 By default, session sockets are stored in `~/.cache/atch/`. The directory is
-created automatically, including `~/.cache` if it does not yet exist. If
-`$HOME` is unset, sockets are stored in `/tmp/.atch-<uid>/`.
+created automatically, including `~/.cache` if it does not yet exist.
+
+When `$HOME` is unset or empty, `atch` looks up the home directory from the
+system user database (`/etc/passwd`). If that also yields nothing useful (or
+points to `/`), sockets fall back to `/tmp/.atch-<uid>/`.
 
 To use a custom path, include a `/` in the session name:
 

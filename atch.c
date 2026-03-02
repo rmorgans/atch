@@ -1,5 +1,41 @@
 #include "atch.h"
 
+/* Env-var name strings, computed from progname at startup. */
+const char *session_envvar;
+const char *session_chain_envvar;
+
+/* Build "NAME_SESSION" / "NAME_SESSIONS" from the basename of progname.
+** Uses static storage — called once before any fork. */
+static void init_envvar_names(void)
+{
+	static char envname[128];
+	static char chainname[128];
+	const char *base = strrchr(progname, '/');
+	const char *p;
+	char *d;
+	size_t max;
+
+	base = base ? base + 1 : progname;
+
+	d = envname;
+	max = sizeof(envname) - sizeof("_SESSION");
+	for (p = base; *p && (size_t)(d - envname) < max; p++)
+		*d++ = (*p >= 'a' && *p <= 'z') ? (char)(*p - 'a' + 'A') :
+		    ((*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9')) ?
+		    *p : '_';
+	strcpy(d, "_SESSION");
+	session_envvar = envname;
+
+	d = chainname;
+	max = sizeof(chainname) - sizeof("_SESSIONS");
+	for (p = base; *p && (size_t)(d - chainname) < max; p++)
+		*d++ = (*p >= 'a' && *p <= 'z') ? (char)(*p - 'a' + 'A') :
+		    ((*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9')) ?
+		    *p : '_';
+	strcpy(d, "_SESSIONS");
+	session_chain_envvar = chainname;
+}
+
 /* Returns the basename of the current session socket path. */
 const char *session_shortname(void)
 {
@@ -12,9 +48,19 @@ void get_session_dir(char *buf, size_t size)
 {
 	const char *home = getenv("HOME");
 	const char *base = strrchr(progname, '/');
+	struct passwd *pw;
 
 	base = base ? base + 1 : progname;
-	if (home && *home)
+
+	/* If $HOME is unset or empty, try the passwd database. */
+	if (!home || !*home) {
+		pw = getpwuid(getuid());
+		if (pw && pw->pw_dir && *pw->pw_dir)
+			home = pw->pw_dir;
+	}
+
+	/* Use $HOME only if it is set and not the root directory. */
+	if (home && *home && strcmp(home, "/") != 0)
 		snprintf(buf, size, "%s/.cache/%s", home, base);
 	else
 		snprintf(buf, size, "/tmp/.%s-%d", base, (int)getuid());
@@ -258,12 +304,10 @@ static int consume_session(int *argc, char ***argv)
 }
 
 /* True if arg matches any of the given names (NULL slots are ignored). */
-static int is_cmd(const char *arg, const char *a, const char *b,
-		  const char *c)
+static int is_cmd(const char *arg, const char *a, const char *b, const char *c)
 {
 	return strcmp(arg, a) == 0 ||
-	    (b && strcmp(arg, b) == 0) ||
-	    (c && strcmp(arg, c) == 0);
+	    (b && strcmp(arg, b) == 0) || (c && strcmp(arg, c) == 0);
 }
 
 /* atch list */
@@ -275,13 +319,47 @@ static int cmd_list(void)
 /* atch current */
 static int cmd_current(void)
 {
-	const char *s = getenv(SESSION_ENVVAR);
+	const char *chain = getenv(SESSION_CHAIN_ENVVAR);
+	const char *single;
+	char *copy, *seg, *colon;
 	const char *name;
+	int first;
 
-	if (!s || !*s)
+	/* Not inside any session. */
+	if ((!chain || !*chain) &&
+	    (!(single = getenv(SESSION_ENVVAR)) || !*single))
 		return 1;
-	name = strrchr(s, '/');
-	printf("%s\n", name ? name + 1 : s);
+
+	/* No chain var — unusual, fall back to SESSION var alone. */
+	if (!chain || !*chain) {
+		name = strrchr(single, '/');
+		printf("%s\n", name ? name + 1 : single);
+		return 0;
+	}
+
+	/* Walk the colon-separated chain (outermost first) and print
+	 ** each session's basename separated by " > ". */
+	copy = strdup(chain);
+	if (!copy)
+		return 1;
+
+	first = 1;
+	seg = copy;
+	for (;;) {
+		colon = strchr(seg, ':');
+		if (colon)
+			*colon = '\0';
+		name = strrchr(seg, '/');
+		if (!first)
+			printf(" > ");
+		printf("%s", name ? name + 1 : seg);
+		first = 0;
+		if (!colon)
+			break;
+		seg = colon + 1;
+	}
+	printf("\n");
+	free(copy);
 	return 0;
 }
 
@@ -485,6 +563,7 @@ int main(int argc, char **argv)
 	const char *cmd;
 
 	progname = argv[0];
+	init_envvar_names();
 	++argv;
 	--argc;
 
@@ -502,12 +581,12 @@ int main(int argc, char **argv)
 	}
 
 	/*
-	** Pre-pass: consume any global options (-q, -e, -E, -r, -R, -z, -t)
-	** that appear before the subcommand or legacy mode letter.  We stop
-	** (without error) as soon as we see a flag that is not a known global
-	** option, so legacy mode letters like -a/-n still reach the dispatcher
-	** below unchanged.
-	*/
+	 ** Pre-pass: consume any global options (-q, -e, -E, -r, -R, -z, -t)
+	 ** that appear before the subcommand or legacy mode letter.  We stop
+	 ** (without error) as soon as we see a flag that is not a known global
+	 ** option, so legacy mode letters like -a/-n still reach the dispatcher
+	 ** below unchanged.
+	 */
 	while (argc >= 1 && argv[0][0] == '-' && argv[0][1] != '\0' &&
 	       argv[0][1] != '-') {
 		char c = argv[0][1];
@@ -522,9 +601,9 @@ int main(int argc, char **argv)
 		usage();
 
 	/*
-	** Legacy backward-compat: flag-based syntax (-a, -c, -n, -N, etc.).
-	** Detected when the first argument is a single-dash flag.
-	*/
+	 ** Legacy backward-compat: flag-based syntax (-a, -c, -n, -N, etc.).
+	 ** Detected when the first argument is a single-dash flag.
+	 */
 	if (argc >= 1 && argv[0][0] == '-' && argv[0][1] != '\0' &&
 	    argv[0][1] != '-') {
 		int mode = (*argv)[1];
@@ -649,68 +728,4 @@ int main(int argc, char **argv)
 
 	/* Smart default: treat first arg as session name → attach-or-create */
 	return cmd_open((char *)cmd, argc, argv);
-}
-
-char const *clear_csi_data(void)
-{
-	if (no_ansiterm || clear_method == CLEAR_NONE ||
-	    (clear_method == CLEAR_UNSPEC && dont_have_tty))
-		return "\r\n";
-	/* CLEAR_MOVE, or CLEAR_UNSPEC with a real tty: move to bottom */
-	return "\033[999H\r\n";
-}
-
-/* Write buf to fd handling partial writes. Exit on failure. */
-void write_buf_or_fail(int fd, const void *buf, size_t count)
-{
-	while (count != 0) {
-		ssize_t ret = write(fd, buf, count);
-
-		if (ret >= 0) {
-			buf = (const char *)buf + ret;
-			count -= ret;
-		} else if (ret < 0 && errno == EINTR)
-			continue;
-		else {
-			if (session_start) {
-				char age[32];
-				session_age(age, sizeof(age));
-				printf
-				    ("%s[%s: session '%s' write failed after %s]\r\n",
-				     clear_csi_data(), progname,
-				     session_shortname(), age);
-			} else {
-				printf("%s[%s: write failed]\r\n",
-				       clear_csi_data(), progname);
-			}
-			exit(1);
-		}
-	}
-}
-
-/* Write pkt to fd. Exit on failure. */
-void write_packet_or_fail(int fd, const struct packet *pkt)
-{
-	while (1) {
-		ssize_t ret = write(fd, pkt, sizeof(struct packet));
-
-		if (ret == sizeof(struct packet))
-			return;
-		else if (ret < 0 && errno == EINTR)
-			continue;
-		else {
-			if (session_start) {
-				char age[32];
-				session_age(age, sizeof(age));
-				printf
-				    ("%s[%s: session '%s' write failed after %s]\r\n",
-				     clear_csi_data(), progname,
-				     session_shortname(), age);
-			} else {
-				printf("%s[%s: write failed]\r\n",
-				       clear_csi_data(), progname);
-			}
-			exit(1);
-		}
-	}
 }
