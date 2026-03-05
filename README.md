@@ -82,7 +82,7 @@ If no command is given, `$SHELL` is used.
 | `run <session> [cmd...]` | Like `start`, but atch stays in the foreground instead of daemonizing. |
 | `push <session>` | Copy stdin verbatim to the session. |
 | `kill [-f] <session>` | Gracefully stop a session (SIGTERM, then SIGKILL after 5 s if needed). With `-f` / `--force`, skip the grace period and send SIGKILL immediately. |
-| `clear <session>` | Truncate the on-disk session log. |
+| `clear [<session>]` | Truncate the on-disk session log. Defaults to the current session when run inside one. |
 | `list` | List all sessions. Shows `[attached]` when a client is connected, `[stale]` for leftover sockets with no running master. Prints `(no sessions)` when the list is empty. |
 | `current` | Print the current session name and exit 0 if inside a session; exit 1 silently if not. |
 
@@ -241,7 +241,7 @@ Every byte written to the pty is appended to a log file on disk
 This is fundamentally different from `tmux`, `screen`, and `dtach`: they hold
 history only in memory. When the process exits or the machine restarts, the
 output is gone. With `atch` the raw byte stream is on disk until you
-explicitly clear it with `atch clear <session>`.
+explicitly clear it with `atch clear` (or `atch clear <session>`).
 
 The log is capped at 1 MB by default; once it exceeds that, only the most
 recent 1 MB is kept. You can change the cap per session with `-C`:
@@ -286,7 +286,8 @@ The value must be a power of two.
 To wipe the on-disk log and start clean on the next attach:
 
 ```sh
-atch clear mysession
+atch clear            # inside a session — clears the current session's log
+atch clear mysession  # from outside — clear a named session's log
 ```
 
 ## Backward compatibility

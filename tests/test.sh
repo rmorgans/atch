@@ -250,8 +250,8 @@ assert_contains "kill -f: nonexistent → message"     "does not exist" "$out"
 # ── 6. clear command ─────────────────────────────────────────────────────────
 
 run "$ATCH" clear
-assert_exit     "clear: no session → exit 1"         1 "$rc"
-assert_contains "clear: no session → message"        "No session was specified" "$out"
+assert_exit     "clear: no session, no env → exit 1"         1 "$rc"
+assert_contains "clear: no session, no env → message"        "No session was specified" "$out"
 
 # clear a nonexistent log is silent success
 run "$ATCH" clear s-noexist-clear
@@ -278,6 +278,24 @@ tidy s-clearq
 run "$ATCH" clear s-noexist-clear extra
 assert_exit     "clear: extra arg → exit 1"          1 "$rc"
 assert_contains "clear: extra arg → message"         "Invalid number of arguments" "$out"
+
+# atch clear with ATCH_SESSION set uses current session
+"$ATCH" start s-clear-cur sleep 999
+wait_socket s-clear-cur
+run env ATCH_SESSION="$HOME/.cache/atch/s-clear-cur" "$ATCH" clear
+assert_exit     "clear: current session → exit 0"    0 "$rc"
+assert_contains "clear: current session → message"   "log cleared" "$out"
+
+# atch clear with no arg uses innermost session from nested chain
+"$ATCH" start s-clear-inner sleep 999
+wait_socket s-clear-inner
+run env ATCH_SESSION="$HOME/.cache/atch/s-clear-cur:$HOME/.cache/atch/s-clear-inner" \
+        "$ATCH" clear
+assert_exit     "clear: nested env no arg → exit 0"  0 "$rc"
+assert_contains "clear: nested env no arg → message" "s-clear-inner" "$out"
+
+tidy s-clear-cur
+tidy s-clear-inner
 
 # ── 7. current command ───────────────────────────────────────────────────────
 

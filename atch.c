@@ -507,8 +507,22 @@ static int cmd_clear(int argc, char **argv)
 	char log_path[600];
 	int fd;
 
-	if (consume_session(&argc, &argv))
-		return 1;
+	if (argc > 0) {
+		if (consume_session(&argc, &argv))
+			return 1;
+	} else {
+		const char *chain = getenv(SESSION_ENVVAR);
+		const char *last;
+
+		if (!chain || !*chain) {
+			printf("%s: No session was specified.\n", progname);
+			printf("Try '%s --help' for more information.\n",
+			       progname);
+			return 1;
+		}
+		last = strrchr(chain, ':');
+		sockname = (char *)(last ? last + 1 : chain);
+	}
 	if (argc > 0) {
 		printf("%s: Invalid number of arguments.\n", progname);
 		printf("Try '%s --help' for more information.\n", progname);
@@ -579,7 +593,7 @@ static void usage(void)
 	       "  kill    [-f] <session>"
 	       "\t\tStop session (SIGTERM then SIGKILL)\n"
 	       "    -f, --force\t\t\tSkip grace period, send SIGKILL immediately\n"
-	       "  clear   <session>"
+	       "  clear   [<session>]"
 	       "\t\t\tTruncate the session log\n"
 	       "  list\t\t\t\t\tList all sessions\n"
 	       "  current\t\t\t\tPrint current session name\n"
