@@ -4,6 +4,13 @@ CFLAGS = -g -O2 -W -Wall -I. -DPACKAGE_VERSION=\"$(VERSION)\"
 LDFLAGS =
 LIBS = -lutil
 
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+  STATIC_FLAG =
+else
+  STATIC_FLAG = -static
+endif
+
 OBJ = attach.o master.o atch.o
 SRC = attach.c master.c atch.c
 
@@ -14,7 +21,7 @@ archs = amd64 arm64
 arch ?= $(shell arch)
 
 atch: $(OBJ)
-	$(CC) -o $(BUILDDIR)/$@ -static $(LDFLAGS) $(OBJ) $(LIBS)
+	$(CC) -o $(BUILDDIR)/$@ $(STATIC_FLAG) $(LDFLAGS) $(OBJ) $(LIBS)
 
 atch.1.md: README.md scripts/readme2man.sh
 	bash scripts/readme2man.sh $< > $@

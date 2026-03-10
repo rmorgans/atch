@@ -1,5 +1,9 @@
 #define HAVE_LIBUTIL 1
+#ifdef __APPLE__
+#define HAVE_UTIL_H 1
+#else
 #define HAVE_PTY_H 1
+#endif
 
 #define HAVE_SYS_IOCTL_H 1
 #define HAVE_SYS_RESOURCE_H 1
