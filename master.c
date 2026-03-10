@@ -853,18 +853,16 @@ forkpty(int *amaster, char *name, struct termios *termp, struct winsize *winp)
 	if (pid < 0)
 		return -1;
 	else if (pid == 0) {
-		char *buf;
-		int fd;
-
 		setsid();
 #ifdef TIOCSCTTY
-		buf = NULL;
 		if (ioctl(slave, TIOCSCTTY, NULL) < 0)
 			_exit(1);
 #else
-		buf = ptsname(master);
-		fd = open(buf, O_RDWR);
-		close(fd);
+		{
+			char *buf = ptsname(master);
+			int fd = open(buf, O_RDWR);
+			close(fd);
+		}
 #endif
 		dup2(slave, 0);
 		dup2(slave, 1);
