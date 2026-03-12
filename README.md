@@ -290,6 +290,16 @@ atch clear            # inside a session — clears the current session's log
 atch clear mysession  # from outside — clear a named session's log
 ```
 
+To clear the log automatically whenever you run `clear`, add a shell function
+to your `.bashrc` / `.zshrc`:
+
+```sh
+clear() { command clear; [ -n "$ATCH_SESSION" ] && atch clear 2>/dev/null; }
+```
+
+This only fires for the literal `clear` command, not for full-screen programs
+like `vim` or `htop` that also erase the terminal.
+
 ## Backward compatibility
 
 The original flag-based syntax is still supported:
