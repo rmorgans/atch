@@ -135,7 +135,7 @@ int replay_session_log(int saved_errno);
 int attach_main(int noerror);
 int master_main(char **argv, int waitattach, int dontfork);
 int push_main(void);
-int list_main(void);
+int list_main(int show_all);
 int kill_main(int force);
 
 char const * clear_csi_data(void);

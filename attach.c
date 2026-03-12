@@ -603,7 +603,7 @@ int kill_main(int force)
 	return 1;
 }
 
-int list_main(void)
+int list_main(int show_all)
 {
 	char dir[512];
 	char path[768];		/* sizeof(dir) + '/' + NAME_MAX */
@@ -655,6 +655,44 @@ int list_main(void)
 	}
 
 	closedir(d);
+
+	/* Second pass: show exited sessions (log files without a socket). */
+	if (show_all) {
+		d = opendir(dir);
+		if (d) {
+			while ((ent = readdir(d)) != NULL) {
+				struct stat lst;
+				char age[32];
+				size_t nlen = strlen(ent->d_name);
+
+				if (nlen <= 4 ||
+				    strcmp(ent->d_name + nlen - 4, ".log") != 0)
+					continue;
+
+				/* Build socket path (name without .log). */
+				snprintf(path, sizeof(path), "%s/%.*s",
+					 dir, (int)(nlen - 4), ent->d_name);
+
+				/* Skip if the socket still exists (already listed). */
+				if (access(path, F_OK) == 0)
+					continue;
+
+				/* Stat the log file for its mtime. */
+				snprintf(path, sizeof(path), "%s/%s",
+					 dir, ent->d_name);
+				if (stat(path, &lst) < 0)
+					continue;
+
+				format_age(now > lst.st_mtime ?
+					   now - lst.st_mtime : 0,
+					   age, sizeof(age));
+				printf("%-24.*s since %s ago [exited]\n",
+				       (int)(nlen - 4), ent->d_name, age);
+				count++;
+			}
+			closedir(d);
+		}
+	}
 
  empty:
 	if (count == 0 && !quiet)

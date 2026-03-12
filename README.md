@@ -84,7 +84,7 @@ If no command is given, `$SHELL` is used.
 | `kill [-f] <session>` | Gracefully stop a session (SIGTERM, then SIGKILL after 5 s if needed). With `-f` / `--force`, skip the grace period and send SIGKILL immediately. |
 | `clear [<session>]` | Truncate the on-disk session log. Defaults to the current session when run inside one. |
 | `tail [-f] [-n N] <session>` | Print the last N lines of the session log (default: 10). With `-f`, follow new output as it is written. |
-| `list` | List all sessions. Shows `[attached]` when a client is connected, `[stale]` for leftover sockets with no running master. Prints `(no sessions)` when the list is empty. |
+| `list [-a]` | List sessions. Shows `[attached]` when a client is connected, `[stale]` for leftover sockets with no running master. With `-a`, also shows `[exited]` sessions that have a log file but are no longer running. Prints `(no sessions)` when the list is empty. |
 | `current` | Print the current session name and exit 0 if inside a session; exit 1 silently if not. |
 
 Short aliases: `a` → `attach`, `n` → `new`, `s` → `start`, `p` → `push`,
