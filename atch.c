@@ -542,6 +542,116 @@ static int cmd_clear(int argc, char **argv)
 	return 0;
 }
 
+/* Scan log fd backward and return the byte offset to seek to before
+** printing the last nlines lines of output. */
+static off_t find_tail_start(int fd, off_t size, int nlines)
+{
+	char buf[BUFSIZE];
+	int count = 0;
+	off_t pos = size;
+
+	while (pos > 0 && count <= nlines) {
+		off_t chunk = pos > (off_t)sizeof(buf) ? (off_t)sizeof(buf) : pos;
+		ssize_t n;
+		ssize_t i;
+
+		pos -= chunk;
+		lseek(fd, pos, SEEK_SET);
+		n = read(fd, buf, (size_t)chunk);
+		if (n <= 0)
+			break;
+		for (i = n - 1; i >= 0; i--) {
+			if (buf[i] == '\n') {
+				if (++count > nlines)
+					return pos + i + 1;
+			}
+		}
+	}
+	return 0;
+}
+
+/* atch tail [-f] [-n N] <session> — print last N lines of session log */
+static int cmd_tail(int argc, char **argv)
+{
+	int follow = 0, nlines = 10;
+	char log_path[600];
+	unsigned char rbuf[BUFSIZE];
+	off_t size, start;
+	ssize_t n;
+	int fd;
+
+	/* Parse -f and -n N (also -nN) before the session name */
+	while (argc >= 1 && argv[0][0] == '-' && argv[0][1] != '\0') {
+		if (strcmp(argv[0], "-f") == 0) {
+			follow = 1;
+			argc--;
+			argv++;
+		} else if (strcmp(argv[0], "-n") == 0) {
+			if (argc < 2) {
+				printf("%s: -n requires an argument\n", progname);
+				printf("Try '%s --help' for more information.\n",
+				       progname);
+				return 1;
+			}
+			nlines = atoi(argv[1]);
+			argc -= 2;
+			argv += 2;
+		} else if (strncmp(argv[0], "-n", 2) == 0 &&
+			   argv[0][2] != '\0') {
+			nlines = atoi(argv[0] + 2);
+			argc--;
+			argv++;
+		} else {
+			printf("%s: Invalid option '%s'\n", progname, argv[0]);
+			printf("Try '%s --help' for more information.\n",
+			       progname);
+			return 1;
+		}
+	}
+	if (nlines < 1)
+		nlines = 1;
+
+	if (consume_session(&argc, &argv))
+		return 1;
+	if (argc > 0) {
+		printf("%s: Invalid number of arguments.\n", progname);
+		printf("Try '%s --help' for more information.\n", progname);
+		return 1;
+	}
+
+	snprintf(log_path, sizeof(log_path), "%s.log", sockname);
+	fd = open(log_path, O_RDONLY);
+	if (fd < 0) {
+		if (errno == ENOENT)
+			printf("%s: no log for session '%s'\n", progname,
+			       session_shortname());
+		else
+			printf("%s: %s: %s\n", progname, log_path,
+			       strerror(errno));
+		return 1;
+	}
+
+	size = lseek(fd, 0, SEEK_END);
+	if (size > 0) {
+		start = find_tail_start(fd, size, nlines);
+		lseek(fd, start, SEEK_SET);
+		while ((n = read(fd, rbuf, sizeof(rbuf))) > 0)
+			write(1, rbuf, (size_t)n);
+	}
+
+	if (follow) {
+		signal(SIGPIPE, SIG_IGN);
+		for (;;) {
+			usleep(250000);
+			while ((n = read(fd, rbuf, sizeof(rbuf))) > 0)
+				write(1, rbuf, (size_t)n);
+		}
+	}
+
+	close(fd);
+	return 0;
+}
+
 /* Default: atch <session> [cmd...] — attach-or-create */
 static int cmd_open(char *session, int argc, char **argv)
 {
@@ -595,6 +705,10 @@ static void usage(void)
 	       "    -f, --force\t\t\tSkip grace period, send SIGKILL immediately\n"
 	       "  clear   [<session>]"
 	       "\t\t\tTruncate the session log\n"
+	       "  tail    [-f] [-n N] <session>"
+	       "\tPrint last N lines of session log\n"
+	       "    -f\t\t\t\tFollow log output\n"
+	       "    -n <lines>\t\t\tNumber of lines (default 10)\n"
 	       "  list\t\t\t\t\tList all sessions\n"
 	       "  current\t\t\t\tPrint current session name\n"
 	       "\n"
@@ -779,6 +893,8 @@ int main(int argc, char **argv)
 		return cmd_kill(argc, argv);
 	if (is_cmd(cmd, "clear", NULL, NULL))
 		return cmd_clear(argc, argv);
+	if (is_cmd(cmd, "tail", NULL, NULL))
+		return cmd_tail(argc, argv);
 
 	/* Smart default: treat first arg as session name → attach-or-create */
 	return cmd_open((char *)cmd, argc, argv);

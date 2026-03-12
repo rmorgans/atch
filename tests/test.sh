@@ -628,13 +628,68 @@ run "$ATCH" start -C foo C-bad sleep 999
 assert_exit     "-C invalid: exit 1"                 1 "$rc"
 assert_contains "-C invalid: message"                "Invalid log size" "$out"
 
-# ── 21. no-args → usage ──────────────────────────────────────────────────────
+# ── 21. tail command ─────────────────────────────────────────────────────────
+
+# tail with no session
+run "$ATCH" tail
+assert_exit     "tail: no session → exit 1"          1 "$rc"
+assert_contains "tail: no session → message"         "No session was specified" "$out"
+
+# tail on nonexistent session (no log file)
+run "$ATCH" tail s-noexist-tail
+assert_exit     "tail: no log → exit 1"              1 "$rc"
+assert_contains "tail: no log → message"             "no log" "$out"
+
+# tail basic: start session that writes 20 numbered lines then sleeps
+# Use zero-padded numbers so e.g. "line01" is not a substring of "line11"
+"$ATCH" start s-tail sh -c \
+    'i=1; while [ $i -le 20 ]; do printf "line%02d\n" $i; i=$((i+1)); done; sleep 999'
+sleep 0.2
+# default 10 lines: should see line11..line20 but not line01
+run "$ATCH" tail s-tail
+assert_exit         "tail: exits 0"                       0 "$rc"
+assert_contains     "tail: shows recent line"             "line20" "$out"
+assert_not_contains "tail: omits early lines"             "line01" "$out"
+
+# -n 5: should see line16..line20
+run "$ATCH" tail -n 5 s-tail
+assert_exit         "tail -n 5: exits 0"                  0 "$rc"
+assert_contains     "tail -n 5: shows line in range"      "line20" "$out"
+assert_not_contains "tail -n 5: omits earlier lines"      "line10" "$out"
+
+# -n with combined flag style (-n5)
+run "$ATCH" tail -n5 s-tail
+assert_exit         "tail -n5 (compact): exits 0"         0 "$rc"
+assert_contains     "tail -n5 (compact): shows line20"    "line20" "$out"
+
+# extra args rejected
+run "$ATCH" tail s-tail extra
+assert_exit     "tail: extra arg → exit 1"           1 "$rc"
+assert_contains "tail: extra arg → message"          "Invalid number of arguments" "$out"
+
+# invalid option
+run "$ATCH" tail -x s-tail
+assert_exit     "tail: invalid option → exit 1"      1 "$rc"
+assert_contains "tail: invalid option → message"     "Invalid option" "$out"
+
+# -n missing argument
+run "$ATCH" tail -n
+assert_exit     "tail -n missing arg: exit 1"        1 "$rc"
+assert_contains "tail -n missing arg: message"       "-n requires an argument" "$out"
+
+tidy s-tail
+
+# ── 22. no-args → usage ──────────────────────────────────────────────────────
 
 # Invoking with zero arguments calls usage() (exits 0, prints help).
 # We already consumed the binary name in main, so argc < 1 → usage().
 run "$ATCH"
 assert_exit     "no args: exits 0 (usage)"           0 "$rc"
 assert_contains "no args: shows Usage:"              "Usage:" "$out"
+
+# tail command appears in help
+run "$ATCH" --help
+assert_contains "help: shows tail command"           "tail" "$out"
 
 # ── summary ──────────────────────────────────────────────────────────────────
 
