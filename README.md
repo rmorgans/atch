@@ -49,7 +49,7 @@ output is gone. With `atch` it is on disk until you clear it.
 - **Full session history on disk** — every line ever written is saved and replayed on re-attach
 - **History survives process exit** — re-opening a session shows the complete prior output before starting fresh
 - Push stdin directly to a running session
-- List all sessions with liveness status
+- List sessions with liveness status; `list -a` also shows exited sessions that still have a log on disk
 - Prevents accidental recursive self-attach
 - Tiny and auditable
 
@@ -69,6 +69,24 @@ rm -f atch.tgz
 ```
 
 Or download the `.tgz` from the releases page and extract it manually.
+
+## Why C and a static binary?
+
+`atch` sits between your keyboard and your running program at the lowest
+level of the Unix process model: it opens pseudo-terminals, manages Unix
+domain sockets, and forwards raw byte streams. These are system-level
+operations that map directly to C system calls. There is no meaningful
+runtime overhead to hide, no framework to bring in, and no interpreter to
+start — the binary does exactly what it advertises and nothing else.
+
+The release binaries are statically linked against
+[musl libc](https://musl.libc.org/). A static musl binary is a
+**single self-contained file** that carries everything it needs. You copy
+it to any Linux machine — Ubuntu, Debian, Alpine, RHEL, a bare container
+image, a two-year-old distro — and it runs. There are no shared library
+version mismatches, no `apt install`, no `LD_LIBRARY_PATH` gymnastics. For
+a small tool you want to drop onto servers and forget about, a static binary
+is the right default.
 
 ## Building from source
 
@@ -100,7 +118,7 @@ If no command is given, `$SHELL` is used.
 | `push <session>` | Copy stdin verbatim to the session. |
 | `kill [-f] <session>` | Gracefully stop a session (SIGTERM, then SIGKILL after 5 s if needed). With `-f` / `--force`, skip the grace period and send SIGKILL immediately. |
 | `clear [<session>]` | Truncate the on-disk session log. Defaults to the current session when run inside one. |
-| `tail [-f] [-n N] <session>` | Print the last N lines of the session log (default: 10). With `-f`, follow new output as it is written. |
+| `tail [-f] [-n N] <session>` | Print the last N lines of the session log (default: 10). Works for both running and exited sessions. With `-f`, follow new output as it is written (useful for monitoring a running session without attaching). |
 | `list [-a]` | List sessions. Shows `[attached]` when a client is connected, `[stale]` for leftover sockets with no running master. With `-a`, also shows `[exited]` sessions that have a log file but are no longer running. Prints `(no sessions)` when the list is empty. |
 | `current` | Print the current session name and exit 0 if inside a session; exit 1 silently if not. |
 
@@ -184,6 +202,11 @@ atch -e '^A' attach work
 atch list
 ```
 
+**List sessions including those that have exited but still have a log:**
+```sh
+atch list -a
+```
+
 **Inspect the last 20 lines of a session log:**
 ```sh
 atch tail -n 20 work
@@ -259,7 +282,8 @@ Every byte written to the pty is appended to a log file on disk
   complete history before the live stream begins.
 - **Session exit** — once the program exits, the full output remains on disk.
   Running `atch mysession` again starts a fresh session but first shows
-  everything from the previous one, so you know exactly what it did.
+  everything from the previous one, so you know exactly what it did. Use
+  `atch list -a` to see all sessions that still have a log, including exited ones.
 - **Machine reboot** — the log file survives a reboot. The next time you
   open the session you see the complete prior output before the new shell
   starts.
@@ -270,6 +294,16 @@ This is fundamentally different from `tmux`, `screen`, and `dtach`: they hold
 history only in memory. When the process exits or the machine restarts, the
 output is gone. With `atch` the raw byte stream is on disk until you
 explicitly clear it with `atch clear` (or `atch clear <session>`).
+
+To inspect the log without attaching to the session, use `atch tail`:
+
+```sh
+atch tail mysession          # last 10 lines
+atch tail -n 50 mysession    # last 50 lines
+atch tail -f mysession       # follow live output
+```
+
+This works whether the session is running, exited, or from a previous boot.
 
 The log is capped at 1 MB by default; once it exceeds that, only the most
 recent 1 MB is kept. You can change the cap per session with `-C`:
