@@ -165,6 +165,35 @@ tidy s-list
 run "$ATCH" list
 assert_eq "list: back to empty after kill" "(no sessions)" "$out"
 
+# list -a: exited sessions (log without socket) appear with [exited]
+# Clear any logs left over from earlier tidy'd sessions so they don't pollute.
+rm -f "$HOME/.cache/atch"/*.log 2>/dev/null || true
+# Simulate an exited session by planting an orphaned log file (no socket).
+mkdir -p "$HOME/.cache/atch"
+printf "some output\n" > "$HOME/.cache/atch/s-exited.log"
+run "$ATCH" list
+assert_not_contains "list: exited session absent without -a" "s-exited" "$out"
+run "$ATCH" list -a
+assert_exit     "list -a: exits 0"                    0 "$rc"
+assert_contains "list -a: shows exited session"       "s-exited" "$out"
+assert_contains "list -a: marks as [exited]"          "[exited]" "$out"
+
+# clean up the exited log before the next checks so it doesn't pollute [exited]
+rm -f "$HOME/.cache/atch/s-exited.log"
+
+# running session is NOT shown as [exited] under -a
+"$ATCH" start s-listrun sleep 999
+run "$ATCH" list -a
+assert_contains     "list -a: running session still listed"  "s-listrun" "$out"
+assert_not_contains "list -a: running session not [exited]"  "[exited]" "$out"
+tidy s-listrun
+rm -f "$HOME/.cache/atch/s-listrun.log"
+
+# list -a with no sessions and no logs → (no sessions)
+run "$ATCH" list -a
+assert_exit "list -a: empty → exits 0"           0 "$rc"
+assert_eq   "list -a: empty → (no sessions)"     "(no sessions)" "$out"
+
 # ── 4. stale session ─────────────────────────────────────────────────────────
 # Use 'run' (dontfork master stays in foreground) so we get the master PID
 # directly via $!.  kill -9 leaves the socket file on disk but removes the
