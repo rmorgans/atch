@@ -53,7 +53,24 @@ output is gone. With `atch` it is on disk until you clear it.
 - Prevents accidental recursive self-attach
 - Tiny and auditable
 
-## Building
+## Installation
+
+The easiest way to get `atch` is to download a pre-built binary from the
+[GitHub releases page](https://github.com/mobydeck/atch/releases). The release
+binaries are statically linked against musl libc — they run on any Linux
+distribution with no dependencies. Just download and extract:
+
+```sh
+arch=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+curl -Lo atch.tgz https://github.com/mobydeck/atch/releases/latest/download/atch-linux-${arch}.tgz
+tar -xzf atch.tgz atch
+sudo mv atch /usr/local/bin/
+rm -f atch.tgz
+```
+
+Or download the `.tgz` from the releases page and extract it manually.
+
+## Building from source
 
 ```sh
 make
