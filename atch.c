@@ -343,10 +343,17 @@ static int is_cmd(const char *arg, const char *a, const char *b, const char *c)
 	    (b && strcmp(arg, b) == 0) || (c && strcmp(arg, c) == 0);
 }
 
-/* atch list */
-static int cmd_list(void)
+/* atch list [-a] */
+static int cmd_list(int argc, char **argv)
 {
-	return list_main();
+	int show_all = 0;
+
+	while (argc >= 1 && strcmp(argv[0], "-a") == 0) {
+		show_all = 1;
+		argc--;
+		argv++;
+	}
+	return list_main(show_all);
 }
 
 /* atch current
@@ -709,7 +716,7 @@ static void usage(void)
 	       "\tPrint last N lines of session log\n"
 	       "    -f\t\t\t\tFollow log output\n"
 	       "    -n <lines>\t\t\tNumber of lines (default 10)\n"
-	       "  list\t\t\t\t\tList all sessions\n"
+	       "  list    [-a]\t\t\t\tList sessions (-a includes exited)\n"
 	       "  current\t\t\t\tPrint current session name\n"
 	       "\n"
 	       "Options:\n"
@@ -781,7 +788,7 @@ int main(int argc, char **argv)
 		if (mode == '?' || mode == 'h')
 			usage();
 		if (mode == 'l')
-			return cmd_list();
+			return cmd_list(argc, argv);
 		if (mode == 'i')
 			return cmd_current();
 		if (mode != 'a' && mode != 'A' && mode != 'c' &&
@@ -876,7 +883,7 @@ int main(int argc, char **argv)
 	--argc;
 
 	if (is_cmd(cmd, "list", "l", "ls"))
-		return cmd_list();
+		return cmd_list(argc, argv);
 	if (is_cmd(cmd, "current", NULL, NULL))
 		return cmd_current();
 	if (is_cmd(cmd, "attach", "a", NULL))
