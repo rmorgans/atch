@@ -518,9 +518,9 @@ static int send_kill(int sig)
 	memset(&pkt, 0, sizeof(pkt));
 	pkt.type = MSG_KILL;
 	pkt.len = (unsigned char)sig;
-	ret = write(s, &pkt, sizeof(pkt));
+	ret = write_all(s, &pkt, sizeof(pkt));
 	close(s);
-	return (ret == sizeof(pkt)) ? 0 : -1;
+	return ret;
 }
 
 static int session_gone(void)
