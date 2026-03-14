@@ -67,7 +67,10 @@ static void rotate_log(void)
 			if (n > 0) {
 				ftruncate(log_fd, 0);
 				lseek(log_fd, 0, SEEK_SET);
-				write(log_fd, buf, (size_t)n);
+				if (write(log_fd, buf, (size_t)n) < 0) {
+					close(log_fd);
+					log_fd = -1;
+				}
 			}
 			free(buf);
 		}
@@ -388,7 +391,10 @@ static void pty_activity(int s)
 	}
 	scrollback_append(buf, (size_t)len);
 	if (log_fd >= 0) {
-		write(log_fd, buf, (size_t)len);
+		if (write(log_fd, buf, (size_t)len) < 0) {
+			close(log_fd);
+			log_fd = -1;
+		}
 		log_written += (size_t)len;
 		if (log_written >= log_max_size) {
 			rotate_log();
