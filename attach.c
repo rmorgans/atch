@@ -27,8 +27,9 @@ char const *clear_csi_data(void)
 	return "\033[999H\r\n";
 }
 
-/* Write buf to fd handling partial writes. Exit on failure. */
-void write_buf_or_fail(int fd, const void *buf, size_t count)
+/* Write all of buf to fd, retrying on short writes and EINTR.
+** Returns 0 on success, -1 on failure (errno is set). */
+static int write_all(int fd, const void *buf, size_t count)
 {
 	while (count != 0) {
 		ssize_t ret = write(fd, buf, count);
@@ -36,49 +37,49 @@ void write_buf_or_fail(int fd, const void *buf, size_t count)
 		if (ret >= 0) {
 			buf = (const char *)buf + ret;
 			count -= ret;
-		} else if (ret < 0 && errno == EINTR)
+		} else if (errno == EINTR)
 			continue;
-		else {
-			if (session_start) {
-				char age[32];
-				session_age(age, sizeof(age));
-				printf
-				    ("%s[%s: session '%s' write failed after %s]\r\n",
-				     clear_csi_data(), progname,
-				     session_shortname(), age);
-			} else {
-				printf("%s[%s: write failed]\r\n",
-				       clear_csi_data(), progname);
-			}
-			exit(1);
+		else
+			return -1;
+	}
+	return 0;
+}
+
+/* Write buf to fd handling partial writes. Exit on failure. */
+void write_buf_or_fail(int fd, const void *buf, size_t count)
+{
+	if (write_all(fd, buf, count) < 0) {
+		if (session_start) {
+			char age[32];
+			session_age(age, sizeof(age));
+			printf
+			    ("%s[%s: session '%s' write failed after %s]\r\n",
+			     clear_csi_data(), progname,
+			     session_shortname(), age);
+		} else {
+			printf("%s[%s: write failed]\r\n",
+			       clear_csi_data(), progname);
 		}
+		exit(1);
 	}
 }
 
 /* Write pkt to fd. Exit on failure. */
 void write_packet_or_fail(int fd, const struct packet *pkt)
 {
-	while (1) {
-		ssize_t ret = write(fd, pkt, sizeof(struct packet));
-
-		if (ret == sizeof(struct packet))
-			return;
-		else if (ret < 0 && errno == EINTR)
-			continue;
-		else {
-			if (session_start) {
-				char age[32];
-				session_age(age, sizeof(age));
-				printf
-				    ("%s[%s: session '%s' write failed after %s]\r\n",
-				     clear_csi_data(), progname,
-				     session_shortname(), age);
-			} else {
-				printf("%s[%s: write failed]\r\n",
-				       clear_csi_data(), progname);
-			}
-			exit(1);
+	if (write_all(fd, pkt, sizeof(struct packet)) < 0) {
+		if (session_start) {
+			char age[32];
+			session_age(age, sizeof(age));
+			printf
+			    ("%s[%s: session '%s' write failed after %s]\r\n",
+			     clear_csi_data(), progname,
+			     session_shortname(), age);
+		} else {
+			printf("%s[%s: write failed]\r\n",
+			       clear_csi_data(), progname);
 		}
+		exit(1);
 	}
 }
 
@@ -497,11 +498,7 @@ int push_main()
 		}
 
 		pkt.len = len;
-		len = write(s, &pkt, sizeof(struct packet));
-		if (len != sizeof(struct packet)) {
-			if (len >= 0)
-				errno = EPIPE;
-
+		if (write_all(s, &pkt, sizeof(struct packet)) < 0) {
 			printf("%s: %s: %s\n", progname, sockname,
 			       strerror(errno));
 			return 1;
