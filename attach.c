@@ -34,13 +34,17 @@ static int write_all(int fd, const void *buf, size_t count)
 	while (count != 0) {
 		ssize_t ret = write(fd, buf, count);
 
-		if (ret >= 0) {
+		if (ret > 0) {
 			buf = (const char *)buf + ret;
 			count -= ret;
-		} else if (errno == EINTR)
+		} else if (ret < 0 && errno == EINTR)
 			continue;
-		else
+		else {
+			/* ret == 0 (no progress) or ret < 0 (real error) */
+			if (ret == 0)
+				errno = EIO;
 			return -1;
+		}
 	}
 	return 0;
 }
