@@ -68,24 +68,8 @@ jobs:
           name: darwin-arm64
           path: atch
 
-  build-darwin-amd64:
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build
-        run: make VERSION=${GITHUB_REF_NAME#v}
-
-      - name: Test
-        run: sh tests/test.sh ./atch
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: darwin-amd64
-          path: atch
-
   release:
-    needs: [build-linux-amd64, build-linux-arm64, build-darwin-arm64, build-darwin-amd64]
+    needs: [build-linux-amd64, build-linux-arm64, build-darwin-arm64]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -104,7 +88,7 @@ jobs:
         run: |
           mkdir -p release staging
 
-          for platform in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
+          for platform in linux-amd64 linux-arm64 darwin-arm64; do
             binary="artifacts/${platform}/atch"
 
             # Bare binary (platform-named for direct download)
@@ -132,6 +116,4 @@ jobs:
             release/atch-linux-arm64 \
             release/atch-linux-arm64.tgz \
             release/atch-darwin-arm64 \
-            release/atch-darwin-arm64.tgz \
-            release/atch-darwin-amd64 \
-            release/atch-darwin-amd64.tgz
+            release/atch-darwin-arm64.tgz
