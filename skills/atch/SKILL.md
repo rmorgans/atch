@@ -54,7 +54,7 @@ Available platforms: `linux-amd64`, `linux-arm64`, `darwin-arm64`. Intel Mac use
 - Use `ssh -t` only for `atch attach`. All other commands work without a PTY — this is what makes them agent-friendly.
 - Distinguish SSH failure from remote `atch` failure. SSH exit 255 means transport/auth failed. `atch` exit 1 means the command itself failed.
 - If the remote binary is not called `atch` or not in PATH, resolve the full path first and reuse it consistently.
-- The target process must be ready before pushing input. Wait for a known marker in `atch log -t` output, or use fast-starting targets (`cat`, `sh`) for smoke tests.
+- The target process must be ready before pushing input. Wait for a known marker in `atch log -n 10` output, or use fast-starting targets (`cat`, `sh`) for smoke tests.
 
 ## Resolving the Remote Command
 
@@ -68,7 +68,7 @@ Then use `$ATCH` in all remote commands:
 
 ```sh
 ssh host "$ATCH" list -a
-ssh host "$ATCH" log -t 50 session
+ssh host "$ATCH" log -n 50 session
 ssh host "$ATCH" start job command arg1
 ```
 
@@ -102,10 +102,10 @@ Use `list -a` to include exited sessions. Treat `(no sessions)` as valid empty s
 
 ### 3. Observe (non-interactive)
 
-**Recent output (tail mode):**
+**Recent output:**
 ```sh
-atch log -t 50 session                           # local
-ssh host atch log -t 50 session                  # remote
+atch log -n 50 session                           # local
+ssh host atch log -n 50 session                  # remote
 ```
 
 **Full log:**
@@ -124,6 +124,12 @@ ssh host 'atch log session | grep "pattern"'     # remote
 ```sh
 atch log -f session
 ssh host atch log -f session
+```
+
+**Tail then follow:**
+```sh
+atch log -f -n 50 session
+ssh host atch log -f -n 50 session
 ```
 
 ### 4. Push Input (non-interactive)
@@ -171,7 +177,7 @@ If found at a non-standard path, use the full path for all subsequent commands.
 - Do not confuse with `atch` exit 1
 
 **Process not reading push input** — the target hasn't started reading yet:
-- Check readiness: `atch log -t session` should show a prompt or startup marker
+- Check readiness: `atch log -n 10 session` should show a prompt or startup marker
 - Retry after a delay, or use a faster-starting target
 
 ## Multi-Host Fan-Out

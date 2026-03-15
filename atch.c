@@ -139,6 +139,21 @@ static int parse_size(const char *s, size_t *out)
 	return 0;
 }
 
+/* Parse a strictly positive decimal integer. */
+static int parse_positive_int(const char *s, int *out)
+{
+	char *end;
+	long v;
+
+	if (!s || !*s)
+		return 1;
+	v = strtol(s, &end, 10);
+	if (*end != '\0' || v < 1 || v > INT_MAX)
+		return 1;
+	*out = (int)v;
+	return 0;
+}
+
 /*
 ** Parse option flags from argv/argc. Stops at '--' or a non-option argument.
 ** Returns 0 on success, 1 on error (message already printed).
@@ -590,37 +605,41 @@ static off_t find_tail_start(int fd, off_t size, int nlines)
 	return 0;
 }
 
-/* atch tail [-f] [-n N] <session> — print last N lines of session log */
+/* atch log [-f] [-n N] <session> — print full log, or tail/follow it */
 static int cmd_log(int argc, char **argv)
 {
-	int follow = 0, tail_mode = 0, nlines = 10;
+	int follow = 0, nlines = 0;
 	char log_path[600];
 	unsigned char rbuf[BUFSIZE];
 	off_t size, start;
 	ssize_t n;
 	int fd;
 
-	/* Parse -f, -t [N] before the session name */
+	/* Parse -f, -n N (also -nN) before the session name */
 	while (argc >= 1 && argv[0][0] == '-' && argv[0][1] != '\0') {
 		if (strcmp(argv[0], "-f") == 0) {
 			follow = 1;
 			argc--;
 			argv++;
-		} else if (strcmp(argv[0], "-t") == 0) {
-			tail_mode = 1;
-			if (argc >= 2 && argv[1][0] >= '0' &&
-			    argv[1][0] <= '9') {
-				nlines = atoi(argv[1]);
-				argc -= 2;
-				argv += 2;
-			} else {
-				argc--;
-				argv++;
+		} else if (strcmp(argv[0], "-n") == 0) {
+			if (argc < 2 || parse_positive_int(argv[1], &nlines)) {
+				printf("%s: -n requires a positive argument\n",
+				       progname);
+				printf("Try '%s --help' for more information.\n",
+				       progname);
+				return 1;
 			}
-		} else if (strncmp(argv[0], "-t", 2) == 0 &&
-			   argv[0][2] >= '0' && argv[0][2] <= '9') {
-			tail_mode = 1;
-			nlines = atoi(argv[0] + 2);
+			argc -= 2;
+			argv += 2;
+		} else if (strncmp(argv[0], "-n", 2) == 0 &&
+			   argv[0][2] != '\0') {
+			if (parse_positive_int(argv[0] + 2, &nlines)) {
+				printf("%s: Invalid line count '%s'\n",
+				       progname, argv[0] + 2);
+				printf("Try '%s --help' for more information.\n",
+				       progname);
+				return 1;
+			}
 			argc--;
 			argv++;
 		} else {
@@ -630,8 +649,6 @@ static int cmd_log(int argc, char **argv)
 			return 1;
 		}
 	}
-	if (tail_mode && nlines < 1)
-		nlines = 1;
 
 	if (consume_session(&argc, &argv))
 		return 1;
@@ -657,7 +674,7 @@ static int cmd_log(int argc, char **argv)
 
 	size = lseek(fd, 0, SEEK_END);
 	if (size > 0) {
-		if (tail_mode) {
+		if (nlines > 0) {
 			start = find_tail_start(fd, size, nlines);
 			lseek(fd, start, SEEK_SET);
 		} else {
@@ -733,9 +750,9 @@ static void usage(void)
 	       "    -f, --force\t\t\tSkip grace period, send SIGKILL immediately\n"
 	       "  clear   [<session>]"
 	       "\t\t\tTruncate the session log\n"
-	       "  log     [-f] [-t [N]] <session>"
+	       "  log     [-f] [-n N] <session>"
 	       "\tFetch session log\n"
-	       "    -t [N]\t\t\tTail mode: last N lines (default 10)\n"
+	       "    -n <lines>\t\t\tPrint last N lines instead of full log\n"
 	       "    -f\t\t\t\tFollow log output\n"
 	       "  list    [-a]\t\t\t\tList sessions (-a includes exited)\n"
 	       "  current\t\t\t\tPrint current session name\n"

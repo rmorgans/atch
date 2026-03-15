@@ -688,22 +688,33 @@ assert_exit         "log: full log exits 0"               0 "$rc"
 assert_contains     "log: full log has first line"        "line01" "$out"
 assert_contains     "log: full log has last line"         "line20" "$out"
 
-# -t default: last 10 lines — should see line11..line20 but not line01
-run "$ATCH" log -t s-log
-assert_exit         "log -t: exits 0"                     0 "$rc"
-assert_contains     "log -t: shows recent line"           "line20" "$out"
-assert_not_contains "log -t: omits early lines"           "line01" "$out"
+# -n 10: should see line11..line20 but not line01
+run "$ATCH" log -n 10 s-log
+assert_exit         "log -n 10: exits 0"                  0 "$rc"
+assert_contains     "log -n 10: shows recent line"        "line20" "$out"
+assert_not_contains "log -n 10: omits early lines"        "line01" "$out"
 
-# -t 5: should see line16..line20
-run "$ATCH" log -t 5 s-log
-assert_exit         "log -t 5: exits 0"                   0 "$rc"
-assert_contains     "log -t 5: shows line in range"       "line20" "$out"
-assert_not_contains "log -t 5: omits earlier lines"       "line10" "$out"
+# -n 5: should see line16..line20
+run "$ATCH" log -n 5 s-log
+assert_exit         "log -n 5: exits 0"                   0 "$rc"
+assert_contains     "log -n 5: shows line in range"       "line20" "$out"
+assert_not_contains "log -n 5: omits earlier lines"       "line10" "$out"
 
-# -t with compact style (-t5)
-run "$ATCH" log -t5 s-log
-assert_exit         "log -t5 (compact): exits 0"          0 "$rc"
-assert_contains     "log -t5 (compact): shows line20"     "line20" "$out"
+# -n with compact style (-n5)
+run "$ATCH" log -n5 s-log
+assert_exit         "log -n5 (compact): exits 0"          0 "$rc"
+assert_contains     "log -n5 (compact): shows line20"     "line20" "$out"
+
+# numeric session names remain valid
+"$ATCH" start 123 sh -c 'printf "numeric-session\n"; sleep 999'
+sleep 0.1
+run "$ATCH" log 123
+assert_exit         "log: numeric session name → exit 0"  0 "$rc"
+assert_contains     "log: numeric session content"         "numeric-session" "$out"
+run "$ATCH" log -n 1 123
+assert_exit         "log -n 1: numeric session → exit 0"  0 "$rc"
+assert_contains     "log -n 1: numeric session content"   "numeric-session" "$out"
+tidy 123
 
 # grep over full log (the key use case)
 run sh -c "\"$ATCH\" log s-log | grep line05"
@@ -719,6 +730,31 @@ assert_contains "log: extra arg → message"           "Invalid number of argume
 run "$ATCH" log -x s-log
 assert_exit     "log: invalid option → exit 1"       1 "$rc"
 assert_contains "log: invalid option → message"      "Invalid option" "$out"
+
+# -n missing argument
+run "$ATCH" log -n
+assert_exit     "log -n missing arg: exit 1"         1 "$rc"
+assert_contains "log -n missing arg: message"        "-n requires a positive argument" "$out"
+
+# -n invalid argument
+run "$ATCH" log -n 0 s-log
+assert_exit     "log -n 0: exit 1"                   1 "$rc"
+assert_contains "log -n 0: message"                  "-n requires a positive argument" "$out"
+
+# -n non-numeric argument
+run "$ATCH" log -n abc s-log
+assert_exit     "log -n abc: exit 1"                 1 "$rc"
+assert_contains "log -n abc: message"                "-n requires a positive argument" "$out"
+
+# -n negative number
+run "$ATCH" log -n -1 s-log
+assert_exit     "log -n -1: exit 1"                  1 "$rc"
+assert_contains "log -n -1: message"                 "-n requires a positive argument" "$out"
+
+# -n0 compact (0 is not positive)
+run "$ATCH" log -n0 s-log
+assert_exit     "log -n0: exit 1"                    1 "$rc"
+assert_contains "log -n0: message"                   "Invalid line count" "$out"
 
 tidy s-log
 
@@ -778,11 +814,11 @@ EXPECT_EOF
              "<= $MAX_BYTES bytes" "$OUT_BYTES bytes"
     fi
 
-    # Replayed content must come from the tail (NEW_DATA present).
+    # Replayed content must come from the end of the log (NEW_DATA present).
     if grep -q "NEW_DATA" "$REPLAY_OUT" 2>/dev/null; then
-        ok "replay-log: tail of log replayed (NEW_DATA present)"
+        ok "replay-log: end of log replayed (NEW_DATA present)"
     else
-        fail "replay-log: tail of log replayed (NEW_DATA present)" \
+        fail "replay-log: end of log replayed (NEW_DATA present)" \
              "NEW_DATA in output" "not found"
     fi
 
@@ -874,7 +910,7 @@ run "$ATCH"
 assert_exit     "no args: exits 0 (usage)"           0 "$rc"
 assert_contains "no args: shows Usage:"              "Usage:" "$out"
 
-# tail command appears in help
+# log command appears in help
 run "$ATCH" --help
 assert_contains "help: shows log command"            "log" "$out"
 

@@ -16,8 +16,7 @@ Atch on the fork (`rmorgans/atch`) now has the full command surface needed for r
 | `attach <session>` | Strict attach (no log replay for dead sessions) | #26 |
 | `new <session> [cmd...]` | Create and attach | upstream |
 | `list [-a]` | List sessions (-a includes exited) | upstream |
-| `tail [-f] [-n N] <session>` | Print last N lines of log | upstream |
-| `log-path <session>` | Print resolved log file path | #27 |
+| `log [-f] [-n N] <session>` | Read full log, tail it, or follow it | #27 |
 | `push <session>` | Pipe stdin into running session | upstream |
 | `kill [-f] <session>` | Stop session | upstream |
 | `clear [<session>]` | Truncate session log | upstream |
@@ -38,7 +37,7 @@ Atch on the fork (`rmorgans/atch`) now has the full command surface needed for r
 | #24 | Close leaked fds in openpty fallback, static assertions | rmorgans |
 | #25 | Async-signal-safe handlers, blocked-write exit | rmorgans |
 | #26 | Strict attach does not replay log for dead sessions | rmorgans |
-| #27 | log-path command | rmorgans |
+| #27 | unified log command | rmorgans |
 
 ### Open upstream issues resolved on fork
 
@@ -49,7 +48,7 @@ Atch on the fork (`rmorgans/atch`) now has the full command surface needed for r
 | #7 Stale attached status | PR #11 |
 | #8 Socket permission race | PR #12 |
 | #20 attach replays log for dead session | PR #26 |
-| #19 Log retrieval without attaching | `tail` + `log-path` (#27) |
+| #19 Log retrieval without attaching | `log` (#27) |
 
 ### Open upstream issues NOT yet addressed
 
@@ -80,14 +79,14 @@ No new binaries or daemons. Just conventions over SSH.
 
 ### 2. Deep search (done)
 
-`log-path` is implemented (PR #27). Full-log deep search is now path-safe:
+`log` is implemented (PR #27). Full-log search is now one command:
 
 ```sh
 # Local:
-grep "pattern" "$(atch log-path session)"
+atch log session | grep "pattern"
 
 # Remote:
-ssh host 'grep -n "pattern" "$(atch log-path session)"'
+ssh host 'atch log session | grep -n "pattern"'
 ```
 
 ### 3. Remaining design decisions
@@ -95,7 +94,7 @@ ssh host 'grep -n "pattern" "$(atch log-path session)"'
 These are deferred until real usage shows they're needed:
 
 - **Push queuing:** file spool drained FIFO when the process reads. Only build if fire-and-forget push proves insufficient.
-- **Structured output:** `--json` flag on `list` and `tail` for easier agent parsing. Only if plain text parsing becomes a bottleneck.
+- **Structured output:** `--json` flag on `list` and `log` for easier agent parsing. Only if plain text parsing becomes a bottleneck.
 - **Central registry:** a service that aggregates session state across hosts. Only if SSH fan-out becomes too slow at scale. Much bigger thing.
 - **Semantic log search:** AI-powered search over log content ("which jobs hit OOM?"). Could layer on top of grep-based approach.
 
@@ -112,7 +111,7 @@ Atch derives its session directory at runtime:
 
 Log files are `<socket-path>.log`.
 
-The skill must never hardcode `~/.cache/atch/`. Use `atch log-path <session>` for the resolved path. Use `atch list` / `atch list -a` for discovery, `atch tail` for recent output.
+The skill must never hardcode `~/.cache/atch/`. Use `atch log <session>` to read log content and `atch list` / `atch list -a` for discovery.
 
 ### Host discovery
 
@@ -149,12 +148,12 @@ ssh host atch list -a
 
 **Recent output:**
 ```sh
-ssh host atch tail -n 50 session
+ssh host atch log -n 50 session
 ```
 
 **Deep search (full log):**
 ```sh
-ssh host 'grep -n "pattern" "$(atch log-path session)"'
+ssh host 'atch log session | grep -n "pattern"'
 ```
 
 **Interactive attach:**
@@ -180,7 +179,7 @@ ssh host atch kill -f session
 
 1. Start a process on a remote host
 2. It's already detached
-3. Periodically check `list`, `tail`, or grep via `log-path`
+3. Periodically check `list`, `log`, or grep over `log`
 4. Push input if needed
 5. Attach interactively when deeper interaction is required
 6. Kill when done

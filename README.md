@@ -118,7 +118,7 @@ If no command is given, `$SHELL` is used.
 | `push <session>` | Copy stdin verbatim to the session. |
 | `kill [-f] <session>` | Gracefully stop a session (SIGTERM, then SIGKILL after 5 s if needed). With `-f` / `--force`, skip the grace period and send SIGKILL immediately. |
 | `clear [<session>]` | Truncate the on-disk session log. Defaults to the current session when run inside one. |
-| `tail [-f] [-n N] <session>` | Print the last N lines of the session log (default: 10). Works for both running and exited sessions. With `-f`, follow new output as it is written (useful for monitoring a running session without attaching). |
+| `log [-f] [-n N] <session>` | Print the full session log. With `-n N`, print only the last N lines. With `-f`, follow new output as it is written. Works for both running and exited sessions. |
 | `list [-a]` | List sessions. Shows `[attached]` when a client is connected, `[stale]` for leftover sockets with no running master. With `-a`, also shows `[exited]` sessions that have a log file but are no longer running. Prints `(no sessions)` when the list is empty. |
 | `current` | Print the current session name and exit 0 if inside a session; exit 1 silently if not. |
 
@@ -209,12 +209,17 @@ atch list -a
 
 **Inspect the last 20 lines of a session log:**
 ```sh
-atch tail -n 20 work
+atch log -n 20 work
 ```
 
 **Follow a session's output without attaching:**
 ```sh
-atch tail -f work
+atch log -f work
+```
+
+**Read the full session log without attaching:**
+```sh
+atch log work
 ```
 
 **Kill a session:**
@@ -295,12 +300,13 @@ history only in memory. When the process exits or the machine restarts, the
 output is gone. With `atch` the raw byte stream is on disk until you
 explicitly clear it with `atch clear` (or `atch clear <session>`).
 
-To inspect the log without attaching to the session, use `atch tail`:
+To inspect the log without attaching to the session, use `atch log`:
 
 ```sh
-atch tail mysession          # last 10 lines
-atch tail -n 50 mysession    # last 50 lines
-atch tail -f mysession       # follow live output
+atch log mysession           # full log
+atch log -n 50 mysession     # last 50 lines
+atch log -f mysession        # follow live output
+atch log -f -n 50 mysession  # last 50 lines, then follow
 ```
 
 This works whether the session is running, exited, or from a previous boot.
