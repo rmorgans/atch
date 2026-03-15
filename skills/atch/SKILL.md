@@ -3,7 +3,7 @@ name: atch
 description: >
   Agent process control plane for persistent processes, locally or over SSH.
   This skill should be used when starting long-running jobs, checking process
-  status, tailing logs, searching output, pushing input, or managing persistent
+  status, viewing logs, searching output, pushing input, or managing persistent
   sessions on local or remote hosts. For shell configuration, use shell.
 ---
 
@@ -13,7 +13,7 @@ description: >
 
 An agent's process control loop:
 1. **Start** a process — it persists independently of the agent session
-2. **Observe** — check status, tail recent output, grep the full log
+2. **Observe** — check status, view log, grep for patterns
 3. **Push** — send input without attaching
 4. **Kill** — clean shutdown when done
 
@@ -50,11 +50,11 @@ Available platforms: `linux-amd64`, `linux-arm64`, `darwin-arm64`. Intel Mac use
 
 ## Guidelines
 
-- Do not hardcode `~/.cache/atch/` or any other session directory. Resolve logs with `atch log-path <session>`.
+- Do not hardcode `~/.cache/atch/` or any other session directory. Use `atch log` to access log content directly.
 - Use `ssh -t` only for `atch attach`. All other commands work without a PTY — this is what makes them agent-friendly.
 - Distinguish SSH failure from remote `atch` failure. SSH exit 255 means transport/auth failed. `atch` exit 1 means the command itself failed.
 - If the remote binary is not called `atch` or not in PATH, resolve the full path first and reuse it consistently.
-- The target process must be ready before pushing input. Wait for a known marker in `tail` output, or use fast-starting targets (`cat`, `sh`) for smoke tests.
+- The target process must be ready before pushing input. Wait for a known marker in `atch log -t` output, or use fast-starting targets (`cat`, `sh`) for smoke tests.
 
 ## Resolving the Remote Command
 
@@ -68,7 +68,7 @@ Then use `$ATCH` in all remote commands:
 
 ```sh
 ssh host "$ATCH" list -a
-ssh host "$ATCH" tail -n 50 session
+ssh host "$ATCH" log -t 50 session
 ssh host "$ATCH" start job command arg1
 ```
 
@@ -77,7 +77,7 @@ All remote examples below use `atch` for readability. Replace with the resolved 
 ## Agent Workflow
 
 ```
-start → tail/log-path/grep → push (if needed) → kill
+start → log/grep → push (if needed) → kill
 ```
 
 Every step is fire-and-forget. The agent does not need to maintain a connection between steps.
@@ -102,31 +102,28 @@ Use `list -a` to include exited sessions. Treat `(no sessions)` as valid empty s
 
 ### 3. Observe (non-interactive)
 
-**Recent output:**
+**Recent output (tail mode):**
 ```sh
-atch tail -n 50 session                          # local
-ssh host atch tail -n 50 session                 # remote
+atch log -t 50 session                           # local
+ssh host atch log -t 50 session                  # remote
 ```
 
-**Deep search (full log) — two-step form:**
+**Full log:**
 ```sh
-# Local:
-grep -n "pattern" "$(atch log-path session)"
-
-# Remote (two-step to avoid quoting issues):
-log_path=$(ssh host atch log-path session)
-ssh host grep -n "pattern" "$log_path"
+atch log session                                 # local
+ssh host atch log session                        # remote
 ```
 
-The compact remote one-liner works but is fragile with user-supplied patterns:
+**Search the log:**
 ```sh
-ssh host 'grep -n "pattern" "$(atch log-path session)"'
+atch log session | grep "pattern"                # local
+ssh host 'atch log session | grep "pattern"'     # remote
 ```
 
 **Follow mode (keeps connection open):**
 ```sh
-atch tail -f session
-ssh host atch tail -f session
+atch log -f session
+ssh host atch log -f session
 ```
 
 ### 4. Push Input (non-interactive)
@@ -150,7 +147,7 @@ ssh host atch kill session                       # remote
 ssh -t host atch attach session
 ```
 
-This is the only command that needs a PTY. Agents should prefer tail/push over attach.
+This is the only command that needs a PTY. Agents should prefer log/push over attach.
 
 ## Error Recovery
 
@@ -162,10 +159,10 @@ If found at a non-standard path, use the full path for all subsequent commands.
 
 **`session does not exist`** — the session was never started or has been killed:
 - Check `atch list -a` for exited sessions with logs still available
-- Use `atch log-path session` to check if the log persists
+- Use `atch log session` to check if log content persists
 
 **`no log for session`** — the session was started with `-C 0` (logging disabled) or the log was cleared:
-- No recovery — both `log-path` and `tail` read the same on-disk log file. If it doesn't exist, neither command can help.
+- No recovery — `atch log` reads the on-disk log file. If it doesn't exist, the command can't help.
 - Attach interactively (`ssh -t host atch attach session`) to observe a running session that has no log.
 
 **SSH exit 255** — SSH transport failure, not an atch error:
@@ -174,7 +171,7 @@ If found at a non-standard path, use the full path for all subsequent commands.
 - Do not confuse with `atch` exit 1
 
 **Process not reading push input** — the target hasn't started reading yet:
-- Check readiness: `atch tail session` should show a prompt or startup marker
+- Check readiness: `atch log -t session` should show a prompt or startup marker
 - Retry after a delay, or use a faster-starting target
 
 ## Multi-Host Fan-Out
@@ -218,11 +215,11 @@ When reporting search results, include the host, session, and matching lines:
 
 - **No persistent connection needed** — start a process, disconnect, come back later
 - **Every command is non-interactive** — no menus, no prompts, no escape sequences
-- **Observation without attachment** — tail and log-path give full visibility without a PTY
+- **Observation without attachment** — `log` gives full visibility without a PTY
 - **Input without attachment** — push sends keystrokes without a terminal session
 - **Named sessions** — agents can reason about `(host, session)` pairs across turns
 - **Exit codes are meaningful** — agents can branch on success/failure programmatically
 
 ## Path Contract
 
-Never hardcode `~/.cache/atch/`. The session directory depends on the binary name and `$HOME` on the remote host. Always use `atch log-path`, `atch list`, and `atch tail` to resolve paths.
+Never hardcode `~/.cache/atch/`. The session directory depends on the binary name and `$HOME` on the remote host. Always use `atch log` and `atch list` to access session data.

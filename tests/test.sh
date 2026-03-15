@@ -665,56 +665,62 @@ run "$ATCH" start -C foo C-bad sleep 999
 assert_exit     "-C invalid: exit 1"                 1 "$rc"
 assert_contains "-C invalid: message"                "Invalid log size" "$out"
 
-# ── 21. tail command ─────────────────────────────────────────────────────────
+# ── 21. log command ──────────────────────────────────────────────────────────
 
-# tail with no session
-run "$ATCH" tail
-assert_exit     "tail: no session → exit 1"          1 "$rc"
-assert_contains "tail: no session → message"         "No session was specified" "$out"
+# log with no session
+run "$ATCH" log
+assert_exit     "log: no session → exit 1"           1 "$rc"
+assert_contains "log: no session → message"          "No session was specified" "$out"
 
-# tail on nonexistent session (no log file)
-run "$ATCH" tail s-noexist-tail
-assert_exit     "tail: no log → exit 1"              1 "$rc"
-assert_contains "tail: no log → message"             "no log" "$out"
+# log on nonexistent session (no log file)
+run "$ATCH" log s-noexist-log
+assert_exit     "log: no log → exit 1"               1 "$rc"
+assert_contains "log: no log → message"              "no log" "$out"
 
-# tail basic: start session that writes 20 numbered lines then sleeps
-# Use zero-padded numbers so e.g. "line01" is not a substring of "line11"
-"$ATCH" start s-tail sh -c \
+# log basic: start session that writes 20 numbered lines then sleeps
+"$ATCH" start s-log sh -c \
     'i=1; while [ $i -le 20 ]; do printf "line%02d\n" $i; i=$((i+1)); done; sleep 999'
 sleep 0.2
-# default 10 lines: should see line11..line20 but not line01
-run "$ATCH" tail s-tail
-assert_exit         "tail: exits 0"                       0 "$rc"
-assert_contains     "tail: shows recent line"             "line20" "$out"
-assert_not_contains "tail: omits early lines"             "line01" "$out"
 
-# -n 5: should see line16..line20
-run "$ATCH" tail -n 5 s-tail
-assert_exit         "tail -n 5: exits 0"                  0 "$rc"
-assert_contains     "tail -n 5: shows line in range"      "line20" "$out"
-assert_not_contains "tail -n 5: omits earlier lines"      "line10" "$out"
+# full log: should see ALL lines including line01
+run "$ATCH" log s-log
+assert_exit         "log: full log exits 0"               0 "$rc"
+assert_contains     "log: full log has first line"        "line01" "$out"
+assert_contains     "log: full log has last line"         "line20" "$out"
 
-# -n with combined flag style (-n5)
-run "$ATCH" tail -n5 s-tail
-assert_exit         "tail -n5 (compact): exits 0"         0 "$rc"
-assert_contains     "tail -n5 (compact): shows line20"    "line20" "$out"
+# -t default: last 10 lines — should see line11..line20 but not line01
+run "$ATCH" log -t s-log
+assert_exit         "log -t: exits 0"                     0 "$rc"
+assert_contains     "log -t: shows recent line"           "line20" "$out"
+assert_not_contains "log -t: omits early lines"           "line01" "$out"
+
+# -t 5: should see line16..line20
+run "$ATCH" log -t 5 s-log
+assert_exit         "log -t 5: exits 0"                   0 "$rc"
+assert_contains     "log -t 5: shows line in range"       "line20" "$out"
+assert_not_contains "log -t 5: omits earlier lines"       "line10" "$out"
+
+# -t with compact style (-t5)
+run "$ATCH" log -t5 s-log
+assert_exit         "log -t5 (compact): exits 0"          0 "$rc"
+assert_contains     "log -t5 (compact): shows line20"     "line20" "$out"
+
+# grep over full log (the key use case)
+run sh -c "\"$ATCH\" log s-log | grep line05"
+assert_exit     "log | grep: exits 0"                0 "$rc"
+assert_contains "log | grep: finds line"             "line05" "$out"
 
 # extra args rejected
-run "$ATCH" tail s-tail extra
-assert_exit     "tail: extra arg → exit 1"           1 "$rc"
-assert_contains "tail: extra arg → message"          "Invalid number of arguments" "$out"
+run "$ATCH" log s-log extra
+assert_exit     "log: extra arg → exit 1"            1 "$rc"
+assert_contains "log: extra arg → message"           "Invalid number of arguments" "$out"
 
 # invalid option
-run "$ATCH" tail -x s-tail
-assert_exit     "tail: invalid option → exit 1"      1 "$rc"
-assert_contains "tail: invalid option → message"     "Invalid option" "$out"
+run "$ATCH" log -x s-log
+assert_exit     "log: invalid option → exit 1"       1 "$rc"
+assert_contains "log: invalid option → message"      "Invalid option" "$out"
 
-# -n missing argument
-run "$ATCH" tail -n
-assert_exit     "tail -n missing arg: exit 1"        1 "$rc"
-assert_contains "tail -n missing arg: message"       "-n requires an argument" "$out"
-
-tidy s-tail
+tidy s-log
 
 # ── 21. replay_session_log: bounded replay (last SCROLLBACK_SIZE bytes only) ──
 #
@@ -870,7 +876,7 @@ assert_contains "no args: shows Usage:"              "Usage:" "$out"
 
 # tail command appears in help
 run "$ATCH" --help
-assert_contains "help: shows tail command"           "tail" "$out"
+assert_contains "help: shows log command"            "log" "$out"
 
 # ── 22. start-inside-session: no [attached] when started from inside a session ──
 #
@@ -1190,57 +1196,27 @@ else
     cd "$ORIG_PWD"
 fi
 
-# ── 27. log-path command ─────────────────────────────────────────────────────
+# ── 27. log on exited sessions ───────────────────────────────────────────────
 
-run "$ATCH" log-path
-assert_exit     "log-path: no session → exit 1"         1 "$rc"
-assert_contains "log-path: no session → message"        "No session was specified" "$out"
-
-# nonexistent session
-run "$ATCH" log-path s-noexist-logpath
-assert_exit     "log-path: no log → exit 1"             1 "$rc"
-assert_contains "log-path: no log → message"            "no log" "$out"
-
-# running session
-"$ATCH" start s-logpath sh -c 'printf "logpath-test\n"; sleep 999'
-sleep 0.1
-run "$ATCH" log-path s-logpath
-assert_exit     "log-path: running → exit 0"            0 "$rc"
-assert_contains "log-path: running → path contains session name" "s-logpath.log" "$out"
-
-# verify the path is a real file with expected content
-logfile="$out"
-grep -q "logpath-test" "$logfile" 2>/dev/null \
-    && ok "log-path: path points to real log with expected content" \
-    || fail "log-path: path points to real log" "logpath-test in file" "not found"
-tidy s-logpath
-
-# exited session — log persists, log-path still works
 rm -f "$HOME/.cache/atch"/*.log 2>/dev/null || true
-"$ATCH" start s-logpath-exit sh -c 'printf "exited-marker\n"; exit 0'
+"$ATCH" start s-log-exit sh -c 'printf "exited-marker\n"; exit 0'
 sleep 0.3
-run "$ATCH" log-path s-logpath-exit
-assert_exit     "log-path: exited session → exit 0"     0 "$rc"
-assert_contains "log-path: exited session → path"       "s-logpath-exit.log" "$out"
-rm -f "$HOME/.cache/atch/s-logpath-exit.log"
 
-# quiet suppresses error message
-run "$ATCH" -q log-path s-noexist-quiet
-assert_exit     "log-path -q: no log → exit 1"          1 "$rc"
-assert_eq       "log-path -q: no output"                "" "$out"
+# full log works on exited session
+run "$ATCH" log s-log-exit
+assert_exit     "log: exited session → exit 0"          0 "$rc"
+assert_contains "log: exited session has content"       "exited-marker" "$out"
 
-# extra args rejected
-run "$ATCH" log-path s-noexist extra
-assert_exit     "log-path: extra arg → exit 1"          1 "$rc"
-assert_contains "log-path: extra arg → message"         "Invalid number of arguments" "$out"
+# quiet suppresses error on nonexistent
+run "$ATCH" -q log s-noexist-quiet
+assert_exit     "log -q: no log → exit 1"               1 "$rc"
+assert_eq       "log -q: no output"                      "" "$out"
 
-# log-path appears in help
-run "$ATCH" --help
-assert_contains "help: shows log-path command"          "log-path" "$out"
+rm -f "$HOME/.cache/atch/s-log-exit.log"
 
 # ── 28. strict attach does not replay log for dead sessions ────────────────
 # atch attach <session> must not dump the log when the session has exited.
-# Use 'atch tail' to view logs explicitly.
+# Use 'atch log' to view logs explicitly.
 
 rm -f "$HOME/.cache/atch"/*.log 2>/dev/null || true
 "$ATCH" start ghost sh -c 'printf "ghost-marker\n"; exit 0'
