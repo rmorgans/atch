@@ -777,6 +777,43 @@ assert_not_contains "fault: session is gone after short-write kill" \
     "short-kill" "$out"
 "$ATCH" kill -f short-kill >/dev/null 2>&1 || true
 
+# ── 24. signal safety (forkpty harness) ────────────────────────────────────
+# Builds and runs a C test binary that uses forkpty() to send signals
+# to the exact atch attach PID. Skips gracefully if cc is unavailable.
+
+TESTS_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+SIGNAL_HARNESS="$TESTDIR/test_signal"
+
+if cc -o "$SIGNAL_HARNESS" "$TESTS_DIR/test_signal.c" -lutil 2>/dev/null; then
+    "$ATCH" start sig-harness sleep 9999
+    wait_socket sig-harness
+
+    sig_out=$("$SIGNAL_HARNESS" "$ATCH" sig-harness 2>&1)
+
+    # Fold harness results into main TAP stream (avoid subshell pipe)
+    sig_tmpfile="$TESTDIR/sig_out.txt"
+    echo "$sig_out" > "$sig_tmpfile"
+    while IFS= read -r line; do
+        case "$line" in
+            ok\ *)
+                desc=$(echo "$line" | sed 's/^ok [0-9]* - //')
+                ok "signal: $desc"
+                ;;
+            not\ ok\ *)
+                desc=$(echo "$line" | sed 's/^not ok [0-9]* - //')
+                fail "signal: $desc"
+                ;;
+            "#"*)
+                printf "%s\n" "$line"
+                ;;
+        esac
+    done < "$sig_tmpfile"
+
+    tidy sig-harness
+else
+    ok "signal: SKIP — cc not available, cannot build forkpty harness"
+fi
+
 # ── summary ──────────────────────────────────────────────────────────────────
 
 printf "\n1..%d\n" "$T"
