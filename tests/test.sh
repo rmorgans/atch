@@ -369,15 +369,23 @@ rm -f /tmp/atch-envname.txt
 # are replaced with underscores in the env var name:
 # binary 'ssh2incus-atch' → env var 'SSH2INCUS_ATCH_SESSION'
 DASH_ATCH="$TESTDIR/bin/ssh2incus-atch"
+DASH_OUT="$TESTDIR/atch-envdash.txt"
+ATCH_ABS=$(cd "$(dirname "$ATCH")" && pwd)/$(basename "$ATCH")
 mkdir -p "$TESTDIR/bin"
-ln -s "$ATCH" "$DASH_ATCH" 2>/dev/null || cp "$ATCH" "$DASH_ATCH"
+ln -s "$ATCH_ABS" "$DASH_ATCH" 2>/dev/null || cp "$ATCH" "$DASH_ATCH"
 "$DASH_ATCH" start envdash-test sh -c \
-    'printf "%s\n" "$SSH2INCUS_ATCH_SESSION" > /tmp/atch-envdash.txt'
-sleep 0.1
-run grep -q "envdash-test" /tmp/atch-envdash.txt
+    "printf '%s\n' \"\$SSH2INCUS_ATCH_SESSION\" > '$DASH_OUT'"
+# Poll for the output file (up to 2s)
+i=0
+while [ $i -lt 40 ]; do
+    [ -s "$DASH_OUT" ] && break
+    sleep 0.05
+    i=$((i + 1))
+done
+run grep -q "envdash-test" "$DASH_OUT"
 assert_exit "current: dash in binary name → underscore in env var name" 0 "$rc"
 "$DASH_ATCH" kill envdash-test >/dev/null 2>&1
-rm -f /tmp/atch-envdash.txt
+rm -f "$DASH_OUT"
 
 # ── 8. push command ───────────────────────────────────────────────────────────
 
@@ -716,10 +724,12 @@ tidy s-tail
 # appears to loop indefinitely.
 #
 # Strategy: create a synthetic .log file larger than SCROLLBACK_SIZE (128 KB),
-# attach to the dead session using expect(1) to supply a PTY (required by
-# attach_main), and verify the output byte count and content.
+# use the smart-open path (atch <session>) which replays the log for a dead
+# session before creating a new one, and verify the output byte count and
+# content.  Note: strict attach (atch attach) no longer replays dead-session
+# logs (#26), so we must use the smart-open path here.
 #
-# expect(1) is available on macOS by default and on most Linux distros.
+# expect(1) is used to supply a real PTY (required by attach_main).
 # If absent, the test is skipped.
 
 if command -v expect >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
@@ -740,12 +750,13 @@ sys.stdout.buffer.write(old * old_count)
 sys.stdout.buffer.write(new * new_count)
 " > "$REPLAY_LOG"
 
-    # Use expect to run atch attach with a real PTY, capturing all output.
-    # atch exits immediately after replaying the log for a dead session.
+    # Use expect to run the smart-open path with a real PTY.
+    # The smart-open path replays the dead-session log, then creates a new
+    # session running 'exit 0' which exits immediately.
     REPLAY_OUT=$(mktemp)
     expect - << EXPECT_EOF > "$REPLAY_OUT" 2>/dev/null
 set timeout 10
-spawn $ATCH attach replay-cap-sess
+spawn $ATCH replay-cap-sess sh -c "exit 0"
 expect eof
 EXPECT_EOF
 
