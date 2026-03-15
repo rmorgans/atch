@@ -478,23 +478,23 @@ int attach_main(int noerror)
 		const char *name = session_shortname();
 
 		if (!noerror) {
-			if (!replay_session_log(saved_errno)) {
-				if (saved_errno == ENOENT)
-					printf
-					    ("%s: session '%s' does not exist\n",
-					     progname, name);
-				else if (saved_errno == ECONNREFUSED)
-					printf
-					    ("%s: session '%s' is not running\n",
-					     progname, name);
-				else if (saved_errno == ENOTSOCK)
-					printf
-					    ("%s: '%s' is not a valid session\n",
-					     progname, name);
-				else
-					printf("%s: %s: %s\n", progname,
-					       sockname, strerror(saved_errno));
-			}
+			/* Strict attach: just print the error, never
+			 * replay the log.  Use 'tail' to view logs. */
+			if (saved_errno == ENOENT)
+				printf
+				    ("%s: session '%s' does not exist\n",
+				     progname, name);
+			else if (saved_errno == ECONNREFUSED)
+				printf
+				    ("%s: session '%s' is not running\n",
+				     progname, name);
+			else if (saved_errno == ENOTSOCK)
+				printf
+				    ("%s: '%s' is not a valid session\n",
+				     progname, name);
+			else
+				printf("%s: %s: %s\n", progname,
+				       sockname, strerror(saved_errno));
 		}
 		return 1;
 	}
