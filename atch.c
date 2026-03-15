@@ -591,6 +591,31 @@ static off_t find_tail_start(int fd, off_t size, int nlines)
 }
 
 /* atch tail [-f] [-n N] <session> — print last N lines of session log */
+static int cmd_log_path(int argc, char **argv)
+{
+	char log_path[600];
+	struct stat st;
+
+	if (consume_session(&argc, &argv))
+		return 1;
+	if (argc > 0) {
+		printf("%s: Invalid number of arguments.\n", progname);
+		printf("Try '%s --help' for more information.\n", progname);
+		return 1;
+	}
+
+	snprintf(log_path, sizeof(log_path), "%s.log", sockname);
+	if (stat(log_path, &st) < 0) {
+		if (!quiet)
+			printf("%s: no log for session '%s'\n", progname,
+			       session_shortname());
+		return 1;
+	}
+
+	printf("%s\n", log_path);
+	return 0;
+}
+
 static int cmd_tail(int argc, char **argv)
 {
 	int follow = 0, nlines = 10;
@@ -729,6 +754,8 @@ static void usage(void)
 	       "\tPrint last N lines of session log\n"
 	       "    -f\t\t\t\tFollow log output\n"
 	       "    -n <lines>\t\t\tNumber of lines (default 10)\n"
+	       "  log-path <session>"
+	       "\t\tPrint resolved log file path\n"
 	       "  list    [-a]\t\t\t\tList sessions (-a includes exited)\n"
 	       "  current\t\t\t\tPrint current session name\n"
 	       "\n"
@@ -920,6 +947,8 @@ int main(int argc, char **argv)
 		return cmd_clear(argc, argv);
 	if (is_cmd(cmd, "tail", NULL, NULL))
 		return cmd_tail(argc, argv);
+	if (is_cmd(cmd, "log-path", NULL, NULL))
+		return cmd_log_path(argc, argv);
 
 	/* Smart default: treat first arg as session name → attach-or-create */
 	return cmd_open((char *)cmd, argc, argv);
