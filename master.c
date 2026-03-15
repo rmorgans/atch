@@ -58,6 +58,9 @@ static void rotate_log(void)
 	char *buf;
 	ssize_t n;
 
+	if (log_fd < 0)
+		return;
+
 	size = lseek(log_fd, 0, SEEK_END);
 	if (size > (off_t) log_max_size) {
 		buf = malloc(log_max_size);
@@ -67,12 +70,18 @@ static void rotate_log(void)
 			if (n > 0) {
 				ftruncate(log_fd, 0);
 				lseek(log_fd, 0, SEEK_SET);
-				write(log_fd, buf, (size_t)n);
+				if (write(log_fd, buf, (size_t)n) < 0) {
+					close(log_fd);
+					log_fd = -1;
+					free(buf);
+					return;
+				}
 			}
 			free(buf);
 		}
 	}
-	lseek(log_fd, 0, SEEK_END);
+	if (log_fd >= 0)
+		lseek(log_fd, 0, SEEK_END);
 }
 
 /*
@@ -90,7 +99,7 @@ static int open_log(const char *path)
 	log_fd = fd;
 	rotate_log();
 	log_written = (size_t)lseek(log_fd, 0, SEEK_CUR);
-	return fd;
+	return log_fd;
 }
 
 /* Write the pty-child PID to <sockname>.ppid for ancestry verification. */
@@ -421,7 +430,12 @@ static void pty_activity(int s)
 	}
 	scrollback_append(buf, (size_t)len);
 	if (log_fd >= 0) {
-		write(log_fd, buf, (size_t)len);
+		if (write(log_fd, buf, (size_t)len) < 0) {
+			close(log_fd);
+			log_fd = -1;
+		}
+	}
+	if (log_fd >= 0) {
 		log_written += (size_t)len;
 		if (log_written >= log_max_size) {
 			rotate_log();
