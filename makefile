@@ -42,7 +42,22 @@ install: atch
 clean:
 	rm -f atch $(OBJ) *.1.md *.c~
 
-.PHONY: install fmt
+SKILL_SRC = $(CURDIR)/skills/atch
+
+install-skill:
+	@echo "Installing atch skill..."
+	@if [ -d "$$HOME/.claude/skills" ]; then \
+		rm -rf "$$HOME/.claude/skills/atch"; \
+		ln -s "$(SKILL_SRC)" "$$HOME/.claude/skills/atch"; \
+		echo "  Claude Code: $$HOME/.claude/skills/atch → $(SKILL_SRC)"; \
+	fi
+	@if [ -d "$$HOME/.codex/skills" ]; then \
+		rm -rf "$$HOME/.codex/skills/atch"; \
+		ln -s "$(SKILL_SRC)" "$$HOME/.codex/skills/atch"; \
+		echo "  Codex: $$HOME/.codex/skills/atch → $(SKILL_SRC)"; \
+	fi
+
+.PHONY: install install-skill fmt
 fmt:
 	docker run --rm -v "$$PWD":/src -w /src alpine:latest sh -c "apk add --no-cache indent && indent -linux $(SRCS) && indent -linux $(SRCS)"
 

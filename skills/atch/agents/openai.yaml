@@ -1,0 +1,4 @@
+interface:
+  display_name: "Atch: Agent Process Control"
+  short_description: "Start, inspect, and control atch jobs"
+  default_prompt: "Use $atch to start, inspect, search, push input to, and control long-running processes with atch locally or over SSH."
