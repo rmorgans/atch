@@ -19,6 +19,26 @@ An agent's process control loop:
 
 Every step is a single non-interactive command. No PTY required (except `attach`).
 
+## Installation
+
+Prebuilt binaries are available from GitHub releases:
+
+```sh
+# Linux amd64 (static musl, runs on any distro):
+curl -L -o /usr/local/bin/atch https://github.com/rmorgans/atch/releases/latest/download/atch-linux-amd64
+chmod +x /usr/local/bin/atch
+
+# Linux arm64:
+curl -L -o /usr/local/bin/atch https://github.com/rmorgans/atch/releases/latest/download/atch-linux-arm64
+chmod +x /usr/local/bin/atch
+
+# macOS (Apple Silicon):
+curl -L -o /usr/local/bin/atch https://github.com/rmorgans/atch/releases/latest/download/atch-darwin-arm64
+chmod +x /usr/local/bin/atch
+```
+
+Or build from source: `git clone https://github.com/rmorgans/atch && cd atch && make && sudo make install`
+
 ## Guidelines
 
 - Do not hardcode `~/.cache/atch/` or any other session directory. Resolve logs with `atch log-path <session>`.
