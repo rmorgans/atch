@@ -1179,6 +1179,54 @@ else
     cd "$ORIG_PWD"
 fi
 
+# ── 27. log-path command ─────────────────────────────────────────────────────
+
+run "$ATCH" log-path
+assert_exit     "log-path: no session → exit 1"         1 "$rc"
+assert_contains "log-path: no session → message"        "No session was specified" "$out"
+
+# nonexistent session
+run "$ATCH" log-path s-noexist-logpath
+assert_exit     "log-path: no log → exit 1"             1 "$rc"
+assert_contains "log-path: no log → message"            "no log" "$out"
+
+# running session
+"$ATCH" start s-logpath sh -c 'printf "logpath-test\n"; sleep 999'
+sleep 0.1
+run "$ATCH" log-path s-logpath
+assert_exit     "log-path: running → exit 0"            0 "$rc"
+assert_contains "log-path: running → path contains session name" "s-logpath.log" "$out"
+
+# verify the path is a real file with expected content
+logfile="$out"
+grep -q "logpath-test" "$logfile" 2>/dev/null \
+    && ok "log-path: path points to real log with expected content" \
+    || fail "log-path: path points to real log" "logpath-test in file" "not found"
+tidy s-logpath
+
+# exited session — log persists, log-path still works
+rm -f "$HOME/.cache/atch"/*.log 2>/dev/null || true
+"$ATCH" start s-logpath-exit sh -c 'printf "exited-marker\n"; exit 0'
+sleep 0.3
+run "$ATCH" log-path s-logpath-exit
+assert_exit     "log-path: exited session → exit 0"     0 "$rc"
+assert_contains "log-path: exited session → path"       "s-logpath-exit.log" "$out"
+rm -f "$HOME/.cache/atch/s-logpath-exit.log"
+
+# quiet suppresses error message
+run "$ATCH" -q log-path s-noexist-quiet
+assert_exit     "log-path -q: no log → exit 1"          1 "$rc"
+assert_eq       "log-path -q: no output"                "" "$out"
+
+# extra args rejected
+run "$ATCH" log-path s-noexist extra
+assert_exit     "log-path: extra arg → exit 1"          1 "$rc"
+assert_contains "log-path: extra arg → message"         "Invalid number of arguments" "$out"
+
+# log-path appears in help
+run "$ATCH" --help
+assert_contains "help: shows log-path command"          "log-path" "$out"
+
 # ── summary ──────────────────────────────────────────────────────────────────
 
 printf "\n1..%d\n" "$T"
