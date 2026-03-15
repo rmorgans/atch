@@ -1179,6 +1179,19 @@ else
     cd "$ORIG_PWD"
 fi
 
+# ── 24. strict attach does not replay log for dead sessions ────────────────
+# atch attach <session> must not dump the log when the session has exited.
+# Use 'atch tail' to view logs explicitly.
+
+rm -f "$HOME/.cache/atch"/*.log 2>/dev/null || true
+"$ATCH" start ghost sh -c 'printf "ghost-marker\n"; exit 0'
+sleep 0.3
+
+run "$ATCH" attach ghost
+assert_exit "ghost: strict attach to exited session → exit 1" 1 "$rc"
+assert_not_contains "ghost: attach does not replay log" "ghost-marker" "$out"
+rm -f "$HOME/.cache/atch/ghost.log"
+
 # ── summary ──────────────────────────────────────────────────────────────────
 
 printf "\n1..%d\n" "$T"
