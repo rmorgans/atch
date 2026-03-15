@@ -21,23 +21,32 @@ Every step is a single non-interactive command. No PTY required (except `attach`
 
 ## Installation
 
-Prebuilt binaries are available from GitHub releases:
+Prebuilt static binaries (Linux) and native binaries (macOS) from GitHub releases. Auto-detects architecture:
 
+**Local install:**
 ```sh
-# Linux amd64 (static musl, runs on any distro):
-curl -L -o /usr/local/bin/atch https://github.com/rmorgans/atch/releases/latest/download/atch-linux-amd64
-chmod +x /usr/local/bin/atch
-
-# Linux arm64:
-curl -L -o /usr/local/bin/atch https://github.com/rmorgans/atch/releases/latest/download/atch-linux-arm64
-chmod +x /usr/local/bin/atch
-
-# macOS (Apple Silicon):
-curl -L -o /usr/local/bin/atch https://github.com/rmorgans/atch/releases/latest/download/atch-darwin-arm64
-chmod +x /usr/local/bin/atch
+ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+OS=$(uname -s | tr A-Z a-z | sed 's/linux/linux/;s/darwin/darwin/')
+curl -L -o /tmp/atch "https://github.com/rmorgans/atch/releases/latest/download/atch-${OS}-${ARCH}"
+sudo install -m 755 /tmp/atch /usr/local/bin/atch && rm /tmp/atch
 ```
 
-Or build from source: `git clone https://github.com/rmorgans/atch && cd atch && make && sudo make install`
+**Remote install (one host):**
+```sh
+ssh host 'ARCH=$(uname -m | sed "s/x86_64/amd64/;s/aarch64/arm64/") && curl -L -o /tmp/atch "https://github.com/rmorgans/atch/releases/latest/download/atch-linux-${ARCH}" && sudo install -m 755 /tmp/atch /usr/local/bin/atch && rm /tmp/atch'
+```
+
+**Remote install (multiple hosts):**
+```sh
+for host in web1 gpu-box lab3; do
+    printf "%s: " "$host"
+    ssh "$host" 'ARCH=$(uname -m | sed "s/x86_64/amd64/;s/aarch64/arm64/") && curl -sL -o /tmp/atch "https://github.com/rmorgans/atch/releases/latest/download/atch-linux-${ARCH}" && sudo install -m 755 /tmp/atch /usr/local/bin/atch && rm /tmp/atch && atch --version' 2>&1 || echo "FAILED"
+done
+```
+
+**Build from source:** `git clone https://github.com/rmorgans/atch && cd atch && make && sudo make install`
+
+Available platforms: `linux-amd64`, `linux-arm64`, `darwin-arm64`. Intel Mac users should build from source.
 
 ## Guidelines
 
