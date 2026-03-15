@@ -1136,7 +1136,35 @@ else
     ok "signal: SKIP — cc not available, cannot build forkpty harness"
 fi
 
-# ── 25. cwd preserved after socket failure ─────────────────────────────────
+# ── 25. fd leak: rapid session cycling under low fd limit ──────────────────
+# openpty fallback leaks fds on error paths. Under a tight fd limit,
+# leaked fds accumulate and eventually prevent new sessions from starting.
+
+(
+    ulimit -n 64 2>/dev/null || true
+    LEAK_FAIL=0
+    i=0
+    while [ $i -lt 50 ]; do
+        out=$("$ATCH" start "leak-$i" sleep 999 2>&1)
+        lrc=$?
+        if [ "$lrc" -ne 0 ]; then
+            LEAK_FAIL=1
+            break
+        fi
+        "$ATCH" kill "leak-$i" >/dev/null 2>&1
+        sleep 0.02
+        i=$((i + 1))
+    done
+    i=0; while [ $i -lt 50 ]; do "$ATCH" kill "leak-$i" >/dev/null 2>&1; i=$((i + 1)); done
+    exit $LEAK_FAIL
+)
+if [ $? -eq 0 ]; then
+    ok "fd-leak: 50 create/destroy cycles under ulimit -n 64"
+else
+    fail "fd-leak: session failed under low fd limit (possible fd leak)" "50 cycles" "failed early"
+fi
+
+# ── 26. cwd preserved after socket failure ─────────────────────────────────
 # socket_with_chdir must restore cwd even when the socket operation fails.
 # We create the parent dir so chdir succeeds, but the session path is bogus.
 
