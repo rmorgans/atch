@@ -1,0 +1,137 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux-amd64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (Alpine/musl, static)
+        run: make build-docker arch=amd64 VERSION=${{ github.ref_name }}
+
+      - name: Test
+        run: |
+          docker run --rm -v "$PWD":/src \
+            --platform linux/amd64 atch-builder:amd64 \
+            sh /src/tests/test.sh /src/build/atch
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-amd64
+          path: build/atch
+
+  build-linux-arm64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build (Alpine/musl, static, arm64 via QEMU)
+        run: make build-docker arch=arm64 VERSION=${{ github.ref_name }}
+
+      - name: Test
+        run: |
+          docker run --rm -v "$PWD":/src \
+            --platform linux/arm64 atch-builder:arm64 \
+            sh /src/tests/test.sh /src/build/atch
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64
+          path: build/atch
+
+  build-darwin-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: make VERSION=${{ github.ref_name }}
+
+      - name: Test
+        run: sh tests/test.sh ./atch
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: darwin-arm64
+          path: atch
+
+  build-darwin-amd64:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: make VERSION=${{ github.ref_name }}
+
+      - name: Test
+        run: sh tests/test.sh ./atch
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: darwin-amd64
+          path: atch
+
+  release:
+    needs: [build-linux-amd64, build-linux-arm64, build-darwin-arm64, build-darwin-amd64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Install pandoc
+        run: sudo apt-get update && sudo apt-get install -y pandoc
+
+      - name: Build man page
+        run: make man
+
+      - name: Package release artifacts
+        run: |
+          mkdir -p release staging
+
+          for platform in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
+            binary="artifacts/${platform}/atch"
+
+            # Bare binary (platform-named for direct download)
+            cp "$binary" "release/atch-${platform}"
+            chmod +x "release/atch-${platform}"
+
+            # Tarball (contains plain 'atch' + README.md + atch.1)
+            cp "$binary" staging/atch
+            chmod +x staging/atch
+            tar -czf "release/atch-${platform}.tgz" \
+              -C staging atch \
+              -C "${{ github.workspace }}" README.md atch.1
+            rm staging/atch
+          done
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            release/atch-linux-amd64 \
+            release/atch-linux-amd64.tgz \
+            release/atch-linux-arm64 \
+            release/atch-linux-arm64.tgz \
+            release/atch-darwin-arm64 \
+            release/atch-darwin-arm64.tgz \
+            release/atch-darwin-amd64 \
+            release/atch-darwin-amd64.tgz

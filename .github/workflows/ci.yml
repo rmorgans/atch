@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-linux-amd64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (Alpine/musl, static, amd64)
+        run: make build-docker arch=amd64 VERSION=ci
+
+      - name: Test
+        run: |
+          docker run --rm -v "$PWD":/src \
+            --platform linux/amd64 atch-builder:amd64 \
+            sh /src/tests/test.sh /src/build/atch
+
+  build-linux-arm64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build (Alpine/musl, static, arm64 via QEMU)
+        run: make build-docker arch=arm64 VERSION=ci
+
+      - name: Test
+        run: |
+          docker run --rm -v "$PWD":/src \
+            --platform linux/arm64 atch-builder:arm64 \
+            sh /src/tests/test.sh /src/build/atch
+
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: make
+
+      - name: Test
+        run: sh tests/test.sh ./atch
